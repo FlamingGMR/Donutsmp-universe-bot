@@ -1,15 +1,16 @@
 {
 "name": "discord-bot",
 "version": "1.0.0",
-"description": "Bot created by FlamingGMR, DM to buy",
+"description": "Discord bot",
 "main": "index.js",
 "scripts": {
 "start": "node index.js"
 },
 "dependencies": {
-"discord.js": "^14.15.3"
+"discord.js": "^14.0.0",
+"node-fetch": "^2.6.7"
 },
 "engines": {
-"node": ">=20.0.0"
+"node": ">=18.0.0"
 }
 }
