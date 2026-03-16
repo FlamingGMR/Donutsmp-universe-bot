@@ -2436,7 +2436,7 @@ flags: MessageFlags.Ephemeral,
 // ==========================================================
 if (commandName === "partnertracking") {
 if (!interaction.guild) return interaction.reply({ embeds: [errorEmbed("Server only.")], flags: MessageFlags.Ephemeral });
-
+await interaction.deferReply();
 return interaction.reply({
 embeds: [buildPartnerLeaderboard(interaction.guildId, interaction.options.getString("period") ?? "all")],
 flags: MessageFlags.Ephemeral,
