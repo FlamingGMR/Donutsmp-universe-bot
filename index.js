@@ -1269,7 +1269,7 @@ if (interaction.isButton()) {
 try {
 return await handleButton(interaction);
 } catch (err) {
-console.error(" Error handling button interaction:", err);
+console.error(" Button error [" + interaction.customId + "]:", err.message);
 const reply = { embeds: [errorEmbed("Something went wrong with that button.")], flags: MessageFlags.Ephemeral };
 if (interaction.replied || interaction.deferred) return interaction.followUp(reply);
 return interaction.reply(reply);
