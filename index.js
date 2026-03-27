@@ -693,8 +693,8 @@ sub
 .setDescription("Start a GiveawaySoS — winners choose to Split or Steal")
 .addStringOption(o => o.setName("prize").setDescription("Prize amount (e.g. 10m, 500k)").setRequired(true))
 .addStringOption(o => o.setName("duration").setDescription("Duration (e.g. 1h, 30m)").setRequired(true))
+.addStringOption(o => o.setName("claimtime").setDescription("How long winners have to respond (e.g. 5m, 10m — default: 10m)").setRequired(false))
 .addIntegerOption(o => o.setName("winners").setDescription("Number of winners (default: 2)").setRequired(false).setMinValue(2).setMaxValue(10))
-.addStringOption(o => o.setName("claimtime").setDescription("How long winners have to respond (e.g. 5m, 10m, 1h)").setRequired(true))
 )
 .setDefaultMemberPermissions(PermissionFlagsBits.ManageEvents),
 // ── DONUT SMP: STATS ─────────────────────────────────────
@@ -5863,7 +5863,7 @@ async function handleSplitOrStealStart(interaction) {
 const prizeStr = interaction.options.getString("prize");
 const durStr = interaction.options.getString("duration");
 const numWinners = interaction.options.getInteger("winners") ?? 2;
-const claimStr = interaction.options.getString("claimtime");
+const claimStr = interaction.options.getString("claimtime") ?? "10m";
 // Prize can be a number (10m) or text (elytra)
 const prizeNum = parseNumber(prizeStr);
 const prize = (!isNaN(prizeNum) && prizeNum > 0) ? prizeNum : prizeStr.trim();
