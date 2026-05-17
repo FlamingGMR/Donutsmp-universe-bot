@@ -1326,31 +1326,24 @@ ChannelType, ChannelSelectMenuBuilder, RoleSelectMenuBuilder,
 StringSelectMenuBuilder, StringSelectMenuOptionBuilder,
 PermissionFlagsBits, PermissionsBitField, MessageFlags,
 AttachmentBuilder, SlashCommandBuilder, REST, Routes,
-// Stores
-guildConfigs, vouchStore, scamVouches, warnStore, partnerLinks,
+// Stores (exact names as declared)
+guildConfigs, vouchStore, scamVouchStore, warnStore, partnerLinks,
 weeklyPaymentStore, giveawayHostCounts, pricingMessages,
 inviteTracker, partnerSessions, giveawayValues, liveLeaderboards,
-activeGiveaways, activeDorks, activeSplitOrSteal,
+activeGiveaways, activeDorks, splitOrStealSessions,
 premiumGuilds, activationKeys, ticketResponseLogged,
+activeApplications, paymentSessions, antiRaidTracker, antiRaidPunished,
 // Helper functions
 getGuildConfig, dbSaveGuildConfig, dbSaveVouch, dbSaveScamVouch,
 dbSaveWarn, dbSavePartnerLinks, dbSaveWeeklyPayment,
 dbClearWeeklyPayments, dbSaveGiveawayCount, dbSavePricing,
 dbSaveInviteTracker, dbSavePartnerSession, dbSaveGiveawayValue,
 dbSaveActiveGiveaway, dbDeleteActiveGiveaway, dbSaveStrike,
-dbSaveLiveLeaderboards, dbSavePremiumGuild, dbRemovePremiumGuild,
 
+dbSaveLiveLeaderboards, dbSavePremiumGuild, dbRemovePremiumGuild,
 dbSaveActivationKey, dbMarkKeyUsed, dbLogTicketStat,
-dbSaveWeeklyPayment, dbClearWeeklyPayments,
 // Utility functions
 parseNumber, formatNumber, compactStat, errorEmbed, successEmbed,
-parseDuration, formatTimeLeft, formatPlaytime, formatEnchants,
-getPeriodCutoff, isOwner, generateActivationKey, requirePerm,
-buildGiveawayEmbed, buildDorkRow, buildGiveawayValueLeaderboard,
-buildVouchLeaderboard, buildPartnerLeaderboard, buildSoSEmbed,
-endGiveaway, endSplitOrStealGiveaway, recordAntiRaidAction,
-checkAntiRaid, donutAPI, INVITE_REGEX_GLOBAL, BOT_OWNER_ID,
-formatNumber, liveLeaderboards,
 };
 // ── Load all event & interaction handlers ─────────────────────
 require("./handlers");
