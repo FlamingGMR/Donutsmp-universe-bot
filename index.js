@@ -1313,8 +1313,47 @@ const doubleBtn = new ButtonBuilder()
 return new ActionRowBuilder().addComponents(keepBtn, doubleBtn);
 }
 
-// ── Load all interaction & event handlers ─────────────────────
-require("./handlers")(client);
+// ── Expose shared state globally so handlers.js can access ───
+// This is the correct pattern for splitting a single-file bot:
+// everything defined here is attached to global so the second
+// file sees it without needing module.exports of 100+ items.
+global._bot = {
+client, db,
+// Discord.js constructors
+EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder,
+ModalBuilder, TextInputBuilder, TextInputStyle,
+ChannelType, ChannelSelectMenuBuilder, RoleSelectMenuBuilder,
+StringSelectMenuBuilder, StringSelectMenuOptionBuilder,
+PermissionFlagsBits, PermissionsBitField, MessageFlags,
+AttachmentBuilder, SlashCommandBuilder, REST, Routes,
+// Stores
+guildConfigs, vouchStore, scamVouches, warnStore, partnerLinks,
+weeklyPaymentStore, giveawayHostCounts, pricingMessages,
+inviteTracker, partnerSessions, giveawayValues, liveLeaderboards,
+activeGiveaways, activeDorks, activeSplitOrSteal,
+premiumGuilds, activationKeys, ticketResponseLogged,
+// Helper functions
+getGuildConfig, dbSaveGuildConfig, dbSaveVouch, dbSaveScamVouch,
+dbSaveWarn, dbSavePartnerLinks, dbSaveWeeklyPayment,
+dbClearWeeklyPayments, dbSaveGiveawayCount, dbSavePricing,
+dbSaveInviteTracker, dbSavePartnerSession, dbSaveGiveawayValue,
+dbSaveActiveGiveaway, dbDeleteActiveGiveaway, dbSaveStrike,
+dbSaveLiveLeaderboards, dbSavePremiumGuild, dbRemovePremiumGuild,
+
+dbSaveActivationKey, dbMarkKeyUsed, dbLogTicketStat,
+dbSaveWeeklyPayment, dbClearWeeklyPayments,
+// Utility functions
+parseNumber, formatNumber, compactStat, errorEmbed, successEmbed,
+parseDuration, formatTimeLeft, formatPlaytime, formatEnchants,
+getPeriodCutoff, isOwner, generateActivationKey, requirePerm,
+buildGiveawayEmbed, buildDorkRow, buildGiveawayValueLeaderboard,
+buildVouchLeaderboard, buildPartnerLeaderboard, buildSoSEmbed,
+endGiveaway, endSplitOrStealGiveaway, recordAntiRaidAction,
+checkAntiRaid, donutAPI, INVITE_REGEX_GLOBAL, BOT_OWNER_ID,
+formatNumber, liveLeaderboards,
+};
+// ── Load all event & interaction handlers ─────────────────────
+require("./handlers");
 // ── Error handling ────────────────────────────────────────────
 process.on("unhandledRejection", err => console.error(" Unhandled rejection:", err));
 process.on("uncaughtException", err => console.error(" Uncaught exception:", err));
