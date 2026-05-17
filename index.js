@@ -351,7 +351,12 @@ inviteTracker.set(row.guild_id, row.data);
 }
 }
 // ── DB loaded flag ───────────────────────────────────────────
-let dbLoaded = false;
+// dbLoaded is accessed via global._bot._dbLoaded so handlers.js
+// sees mutations. Use a getter/setter on the local name too.
+let _dbLoadedVal = false;
+Object.defineProperty(global, '_dbLoadedVal', { get() { return _dbLoadedVal; }, set(v) { _dbLoadedVal = v; if (global._bot) global._bot._dbLoaded = v; }, configurable: true });
+// Alias used in this file
+const getDbLoaded = () => _dbLoadedVal;
 
 async function dbSavePartnerSession(guildId) {
 const d = partnerSessions.get(guildId) ?? {};
@@ -377,12 +382,12 @@ await db.query(
 `INSERT INTO live_leaderboards (guild_id, data) VALUES ($1,$2) ON CONFLICT (guild_id) DO UPDATE SET data=$2`,
 [guildId, JSON.stringify(data)]
 ).catch(e => console.error("DB live_leaderboards save:", e.message));
+
 }
 async function dbLoadLiveLeaderboards() {
 const res = await db.query("SELECT guild_id, data FROM live_leaderboards").catch(() => ({ rows: [] }));
 for (const row of res.rows) {
 liveLeaderboards.set(row.guild_id, row.data);
-
 }
 console.log(" Loaded", res.rows.length, "live leaderboard configs from DB");
 }
@@ -423,12 +428,12 @@ VALUES ($1,$2,$3,$4,$5,$6)`,
 async function loadAllFromDB() {
 await Promise.all([
 dbLoadAllGuildConfigs(),
+
 dbLoadAllVouches(),
 dbLoadAllScamVouches(),
 dbLoadAllWarns(),
 dbLoadAllPartnerLinks(),
 dbLoadAllWeeklyPayments(),
-
 dbLoadAllGiveawayCounts(),
 dbLoadAllPricing(),
 dbLoadAllInviteTracker(),
@@ -470,14 +475,14 @@ if (!ch) { dbDeleteActiveGiveaway(r.message_id); return; }
 if (data.isSplitOrSteal) await endSplitOrStealGiveaway(r.message_id, ch, data).catch(()=>{});
 else await endGiveaway(r.message_id, ch).catch(()=>{});
 } catch(e) { console.error("Giveaway restore error:", e.message); }
+
 }, delay);
 gwRestored++;
 }
 console.log(" Loaded", gwRestored, "active giveaways from DB");
 } catch(e) { console.error("loadAllFromDB active_giveaways:", e.message); }
-
 console.log(" All data loaded from database");
-dbLoaded = true;
+global._bot._dbLoaded = true;
 }
 // Helper: get or create guild config
 function getGuildConfig(guildId) {
@@ -516,12 +521,12 @@ return guildConfigs.get(guildId);
 const TICKET_CATEGORIES = {
 support: "Support Tickets",
 giveaway: "Giveaway Tickets",
+
 partnership: "Partnership Ticket",
 spawner: "Spawner Staff Ticket",
 report: "Member/Staff Report",
 building: "Building Ticket",
 mysterybox: "Mystery Box",
-
 };
 // ── Application config ────────────────────────────────────────
 const STAFF_APP_QUESTIONS = [
@@ -559,12 +564,12 @@ return num.toString();
 }
 // ── Helper: compact stat number (1500 -> 1.5k) ─────────────
 function compactStat(n) {
+
 const num = parseFloat(n) || 0;
 if (num >= 1_000_000_000) return (num / 1_000_000_000).toFixed(1).replace(/\.0$/, "") + "b";
 if (num >= 1_000_000) return (num / 1_000_000).toFixed(1).replace(/\.0$/, "") + "m";
 if (num >= 1_000) return (num / 1_000).toFixed(1).replace(/\.0$/, "") + "k";
 return String(Math.round(num));
-
 }
 // ── Helper: consistent error embed ───────────────────────────
 function errorEmbed(message) {
@@ -599,11 +604,11 @@ new SlashCommandBuilder()
 .addUserOption(o => o.setName("user").setDescription("Member to check").setRequired(true))
 .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
 new SlashCommandBuilder()
+
 .setName("clearwarnings")
 .setDescription("Clear all warnings for a member")
 .addUserOption(o => o.setName("user").setDescription("Member to clear").setRequired(true))
 .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
-
 // ── SMOKER ────────────────────────────────────────────────
 new SlashCommandBuilder()
 .setName("smoker")
@@ -639,11 +644,11 @@ o.setName("duration")
 .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
 new SlashCommandBuilder()
 .setName("untimeout")
+
 .setDescription("Remove timeout from a member")
 .addUserOption(o => o.setName("user").setDescription("Member to untimeout").setRequired(true))
 .addStringOption(o => o.setName("reason").setDescription("Reason").setRequired(false))
 .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
-
 // ── ROLE MANAGEMENT ──────────────────────────────────────
 new SlashCommandBuilder()
 .setName("addrole")
@@ -680,12 +685,12 @@ o.setName("amount")
 .setRequired(true)
 )
 .addStringOption(o =>
+
 o.setName("type")
 .setDescription("Are you buying or selling?")
 .setRequired(true)
 .addChoices(
 { name: "Buying (you buy from server)", value: "buy" },
-
 { name: "Selling (you sell to server)", value: "sell" }
 )
 ),
@@ -724,12 +729,12 @@ new SlashCommandBuilder()
 .setName("giveawaydork").setDescription("Start a Dork giveaway — winner can double the prize")
 .addStringOption(o=>o.setName("prize").setDescription("Starting prize (e.g. 5m)").setRequired(true))
 .addStringOption(o=>o.setName("duration").setDescription("Duration (e.g. 1h, 30m)").setRequired(true))
+
 .addStringOption(o=>o.setName("maxprize").setDescription("Max prize cap (e.g. 10m)").setRequired(true))
 .addStringOption(o=>o.setName("description").setDescription("Extra description").setRequired(false))
 .setDefaultMemberPermissions(PermissionFlagsBits.ManageEvents),
 new SlashCommandBuilder()
 .setName("giveawaysos").setDescription("Start a GiveawaySoS — winners Split or Steal")
-
 .addStringOption(o=>o.setName("prize").setDescription("Prize (e.g. 10m, Elytra)").setRequired(true))
 .addStringOption(o=>o.setName("duration").setDescription("Duration (e.g. 1h, 30m)").setRequired(true))
 .addIntegerOption(o=>o.setName("winners").setDescription("Winners (default: 2)").setRequired(false).setMinValue(2).setMaxValue(10))
@@ -767,11 +772,11 @@ o.setName("username")
 .setRequired(true)
 )
 .setDMPermission(true),
+
 // ── DONUT SMP: AUCTION HOUSE ──────────────────────────────
 new SlashCommandBuilder()
 .setName("ah")
 .setDescription("Search the DonutSMP Auction House for an item")
-
 .addStringOption(o =>
 o.setName("item")
 .setDescription("Item name to search for (e.g. diamond, sword)")
@@ -810,12 +815,12 @@ o.setName("type")
 .setDescription("Which leaderboard to view")
 .setRequired(true)
 .addChoices(
+
 { name: " Money", value: "money" },
 { name: " Kills", value: "kills" },
 { name: " Deaths", value: "deaths" },
 { name: " Playtime", value: "playtime" },
 { name: " Shards", value: "shards" },
-
 { name: " Most Sold (/sell)", value: "sell" },
 { name: " Most Spent (/shop)", value: "shop" },
 { name: " Mobs Killed", value: "mobskilled" },
@@ -850,12 +855,12 @@ new SlashCommandBuilder()
 .setName("vouch")
 .setDescription("Vouch for a user in this server")
 .addUserOption(o =>
+
 o.setName("user")
 .setDescription("The user you are vouching for")
 .setRequired(true)
 )
 .addStringOption(o =>
-
 o.setName("reason")
 .setDescription("Why are you vouching for them?")
 .setRequired(true)
@@ -892,10 +897,10 @@ o.setName("reason")
 new SlashCommandBuilder()
 .setName("embedorganized")
 .setDescription("Create a customized embed using a popup form")
+
 .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages),
 // ── PURGE ─────────────────────────────────────────────────
 new SlashCommandBuilder()
-
 .setName("purge")
 .setDescription("Delete a specified number of recent messages")
 .addIntegerOption(o =>
@@ -932,11 +937,11 @@ new SlashCommandBuilder()
 .setDescription("Remove a user from the current ticket")
 .addUserOption(o =>
 o.setName("user")
+
 .setDescription("User to remove")
 .setRequired(true)
 )
 .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
-
 // ── PRICING ───────────────────────────────────────────────
 new SlashCommandBuilder()
 .setName("pricing")
@@ -968,12 +973,12 @@ new SlashCommandBuilder()
 .setDMPermission(true),
 // ── SLOWMODE ──────────────────────────────────────────────
 new SlashCommandBuilder()
+
 .setName("slowmode")
 .setDescription("Set slowmode on a channel")
 .addStringOption(o =>
 o.setName("duration")
 .setDescription("Duration e.g. 0, 5s, 3m, 1h (0 to disable)")
-
 .setRequired(true)
 )
 .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
@@ -1005,12 +1010,12 @@ new SlashCommandBuilder()
 .setDescription("View join/leave stats for this server")
 .addStringOption(o =>
 o.setName("period")
+
 .setDescription("Time period to check")
 .setRequired(false)
 .addChoices(
 { name: "Last 24 hours", value: "24h" },
 { name: "Last week", value: "week" },
-
 { name: "Last month", value: "month" },
 { name: "All time", value: "all" }
 )
@@ -1082,11 +1087,11 @@ o.setName("period")
 .setRequired(false)
 .addChoices(
 { name: "Last 7 Days", value: "week" },
+
 { name: "Last Month", value: "month" },
 { name: "All Time", value: "all" }
 )
 ),
-
 new SlashCommandBuilder()
 .setName("vouchleaderboard")
 .setDescription("Show the vouch leaderboard from most to least")
@@ -1125,12 +1130,12 @@ o.setName("amount")
 )
 .addStringOption(o =>
 o.setName("clear")
+
 .setDescription("Clear all weekly payment records for this server")
 .setRequired(false)
 .addChoices({ name: "Clear all records", value: "clear" })
 )
 .setDefaultMemberPermissions(PermissionFlagsBits.ManageEvents),
-
 // ── PREMIUM SYSTEM ────────────────────────────────────────
 new SlashCommandBuilder()
 .setName("premium")
@@ -1164,11 +1169,11 @@ new SlashCommandBuilder()
 new SlashCommandBuilder()
 .setName("weeklypaymentpost")
 .setDescription("Post the weekly payment list publicly")
+
 .setDefaultMemberPermissions(PermissionFlagsBits.ManageEvents),
 
 new SlashCommandBuilder()
 .setName("strike")
-
 .setDescription("Give one or more users a strike")
 .addStringOption(o => o.setName("users").setDescription("User IDs separated by spaces or commas").setRequired(true))
 .addStringOption(o => o.setName("reason").setDescription("Reason for the strike").setRequired(true))
@@ -1206,12 +1211,12 @@ try { for (const g of client.guilds.cache.values()) await rest.put(Routes.applic
 console.log("Registering slash commands...");
 try {
 await rest.put(Routes.applicationCommands(clientId),{body:[]});
+
 console.log("Cleared global commands");
 if (guildId) {
 await rest.put(Routes.applicationGuildCommands(clientId,guildId),{body:commands});
 console.log("Slash commands registered to guild "+guildId+" ("+commands.length+" commands)");
 } else {
-
 await rest.put(Routes.applicationCommands(clientId),{body:commands});
 console.log("Slash commands registered globally ("+commands.length+" commands)");
 }
@@ -1250,11 +1255,11 @@ return value * map[unit];
 // ── Owner guard (absolute — Discord ID only) ─────────────────
 const BOT_OWNER_ID = "1012989279049367592";
 function isOwner(userId) { return userId === BOT_OWNER_ID; }
+
 // ── Generate random 12-char activation key ────────────────────
 function generateActivationKey() {
 const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 let key = "";
-
 for (let i = 0; i < 12; i++) key += chars[Math.floor(Math.random() * chars.length)];
 return key.slice(0,4) + "-" + key.slice(4,8) + "-" + key.slice(8,12);
 }
@@ -1292,11 +1297,11 @@ if (data.maxPrize !== null && data.maxPrize !== undefined) {
 embed.setFooter({ text: `Max prize cap: ${formatNumber(data.maxPrize)}` });
 }
 return embed;
+
 }
 // ── Helper: build dork buttons ────────────────────────────────
 function buildDorkRow(currentPrize, maxPrize, dorkId, forceDisableDouble = false) {
 const doubled = currentPrize * 2;
-
 const canDouble = !forceDisableDouble && doubled <= maxPrize && currentPrize > 0;
 const keepBtn = new ButtonBuilder()
 .setCustomId(`dork_keep_${dorkId}`)
@@ -1333,17 +1338,20 @@ inviteTracker, partnerSessions, giveawayValues, liveLeaderboards,
 activeGiveaways, activeDorks, splitOrStealSessions,
 premiumGuilds, activationKeys, ticketResponseLogged,
 activeApplications, paymentSessions, antiRaidTracker, antiRaidPunished,
-// Helper functions
+// DB functions
+
+initDB, loadAllFromDB,
 getGuildConfig, dbSaveGuildConfig, dbSaveVouch, dbSaveScamVouch,
 dbSaveWarn, dbSavePartnerLinks, dbSaveWeeklyPayment,
 dbClearWeeklyPayments, dbSaveGiveawayCount, dbSavePricing,
 dbSaveInviteTracker, dbSavePartnerSession, dbSaveGiveawayValue,
 dbSaveActiveGiveaway, dbDeleteActiveGiveaway, dbSaveStrike,
-
 dbSaveLiveLeaderboards, dbSavePremiumGuild, dbRemovePremiumGuild,
 dbSaveActivationKey, dbMarkKeyUsed, dbLogTicketStat,
 // Utility functions
 parseNumber, formatNumber, compactStat, errorEmbed, successEmbed,
+parseDuration, BOT_OWNER_ID, isOwner, generateActivationKey,
+requirePerm, INVITE_REGEX_GLOBAL,
 };
 // ── Load all event & interaction handlers ─────────────────────
 require("./handlers");
