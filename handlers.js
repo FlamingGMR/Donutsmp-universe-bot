@@ -44,6 +44,48 @@ configurable: true,
 // recordAntiRaidAction, checkAntiRaid, buildGiveawayEmbed,
 // buildDorkRow, buildGiveawayValueLeaderboard,
 // buildVouchLeaderboard, buildPartnerLeaderboard, buildSoSEmbed
+// ── Giveaway embed builders (moved here from index.js) ──────────
+function buildGiveawayEmbed(data) {
+const endTimestamp = Math.floor(data.endsAt / 1000);
+let desc = "";
+if (data.description) desc += `${data.description}\n`;
+desc += `\n Ending: <t:${endTimestamp}:R>`;
+desc += `\n Host: <@${data.hostId}>`;
+desc += `\n Entries: **${data.entries.length}**`;
+const embed = new EmbedBuilder()
+.setColor(0xf1c40f)
+.setTitle(" " + (typeof data.prize === "number" ? formatNumber(data.prize) : data.prize))
+.setDescription(desc)
+.setTimestamp(data.endsAt);
+if (data.maxPrize !== null && data.maxPrize !== undefined) {
+embed.setFooter({ text: `Max prize cap: ${formatNumber(data.maxPrize)}` });
+}
+return embed;
+}
+function buildDorkRow(currentPrize, maxPrize, dorkId, forceDisableDouble = false) {
+const doubled = currentPrize * 2;
+const canDouble = !forceDisableDouble && doubled <= maxPrize && currentPrize > 0;
+const keepBtn = new ButtonBuilder().setCustomId(`dork_keep_${dorkId}`).setLabel(" Keep").setStyle(ButtonStyle.Success);
+const doubleLabel = forceDisableDouble ? " Double (N/A)" : ` Double (→ ${formatNumber(doubled)})`;
+const doubleBtn = new ButtonBuilder().setCustomId(`dork_double_${dorkId}`).setLabel(doubleLabel).setStyle(ButtonStyle.Danger).setDisabled(!canDouble);
+return new ActionRowBuilder().addComponents(keepBtn, doubleBtn);
+}
+function buildSoSEmbed(data) {
+const endTimestamp = Math.floor(data.endsAt / 1000);
+const prizeDisplay = typeof data.prize === "number" ? formatNumber(data.prize) : (data.prizeStr ?? data.prize);
+return new EmbedBuilder()
+.setColor(0xe67e22)
+.setTitle(" GIVEAWAY SOS ")
+.setDescription(
+`**Prize: ${prizeDisplay}**\n\n` +
+`Split = share equally | Steal = take all (if no one else steals)\n\n` +
+` Ending: <t:${endTimestamp}:R>\n` +
+` Host: <@${data.hostId}>\n` +
+` Entries: **${(data.entries||[]).length}**`
+)
+
+.setTimestamp(data.endsAt);
+}
 
 // ============================================================
 // INTERACTION HANDLER
@@ -80,10 +122,10 @@ const description = interaction.fields.getTextInputValue("embed_description");
 let footer = "";
 try { footer = interaction.fields.getTextInputValue("embed_footer").trim(); } catch { footer = ""; }
 const embed = new EmbedBuilder()
-
 .setColor(0x1e40af)
 .setDescription(description)
 .setTimestamp();
+
 if (title) embed;
 if (footer) embed.setFooter({ text: footer });
 await interaction.reply({ content: "Embed sent!", flags: MessageFlags.Ephemeral });
@@ -123,10 +165,10 @@ if (!userId || !appType) return interaction.reply({ embeds: [errorEmbed("Invalid
 return await handleDenyReasonModal(interaction, userId, appType);
 }
 } catch (err) {
-
 console.error(" Error handling modal submission:", err);
 const reply = { embeds: [errorEmbed("Something went wrong with that form.")], flags: MessageFlags.Ephemeral };
 if (interaction.replied || interaction.deferred) return interaction.followUp(reply);
+
 return interaction.reply(reply);
 }
 return;
@@ -165,10 +207,10 @@ const embed = new EmbedBuilder()
 { name: " Embeds", value: "`/embed` `/embedorganized`", inline: false },
 { name: " Giveaways", value: "`/giveaway` `/giveawaydork` `/giveawaysos` `/giveawayend` `/giveawaytrack` `/giveawayleaderboard` `/giveawaytracking`", inline: false },
 { name: " Vouches", value: "`/vouch` `/vouchcount` `/vouchleaderboard` `/scamvouch`", inline: false },
-
 { name: " Tickets", value: "`/ticketpanelsend` `/close` `/ticketrename` `/ticketuseradd` `/ticketuserremove`", inline: false },
 { name: " Applications", value: "`/applicationpanelsend`", inline: false },
 { name: " Economy", value: "`/spawner` `/setspawnerprice` `/spawnerpricesend` `/paymenttracking` `/pricing` `/pricingset` `/invite` `/wait`", inline: false },
+
 { name: " DonutSMP", value: "`/stats` `/lookup` `/ah` `/ah-recent` `/leaderboard`", inline: false },
 { name: " Partner", value: "`/partnertracking`", inline: false },
 { name: " Weekly Payment", value: "`/weeklypayment` `/weeklypaymentpost`", inline: false },
@@ -206,9 +248,9 @@ return interaction.reply({ embeds: [embed] });
 // ==========================================================
 // MODERATION: /unban
 // ==========================================================
-
 if (commandName === "unban") {
 const _permCheck = requirePerm(interaction, PermissionFlagsBits.BanMembers); if (_permCheck) return _permCheck;
+
 const userId = interaction.options.getString("userid").trim();
 const reason = interaction.options.getString("reason") ?? "No reason provided";
 let user;
@@ -246,9 +288,9 @@ const durationMs = parseDuration(durStr);
 if (isNaN(durationMs)) {
 return interaction.reply({ embeds: [errorEmbed("Invalid duration. Use formats like `10m`, `1h`, `7d`.")], flags: MessageFlags.Ephemeral });
 }
-
 const maxTimeout = 28 * 24 * 60 * 60 * 1000; // 28 days in ms
 if (durationMs > maxTimeout) {
+
 return interaction.reply({ embeds: [errorEmbed("Maximum timeout duration is 28 days.")], flags: MessageFlags.Ephemeral });
 }
 const member = await interaction.guild.members.fetch(target.id).catch(() => null);
@@ -285,9 +327,9 @@ if (!member) {
 return interaction.reply({ embeds: [errorEmbed("That user is not in this server.")], flags: MessageFlags.Ephemeral });
 }
 if (!member.isCommunicationDisabled()) {
-
 return interaction.reply({ embeds: [errorEmbed("That user is not currently timed out.")], flags: MessageFlags.Ephemeral });
 }
+
 await member.timeout(null, reason);
 const embed = new EmbedBuilder()
 .setColor(0x2ecc71)
@@ -325,10 +367,10 @@ const embed = new EmbedBuilder()
 .addFields(
 { name: " User", value: `<@${target.id}> (${target.username})`, inline: true },
 { name: " Role", value: `<@&${role.id}>`, inline: true },
-
 { name: " Moderator", value: `<@${interaction.user.id}>`, inline: true }
 )
 .setTimestamp();
+
 return interaction.reply({ embeds: [embed] });
 }
 // ==========================================================
@@ -365,9 +407,9 @@ return interaction.reply({ embeds: [embed] });
 // ==========================================================
 if (commandName === "embed") {
 const title = interaction.options.getString("title");
-
 const description = interaction.options.getString("description");
 const colorInput = interaction.options.getString("color");
+
 let color = 0x5865f2; // Discord blurple default
 if (colorInput) {
 const hex = colorInput.replace("#", "");
@@ -406,8 +448,8 @@ const emoji = isBuying ? " " : " ";
 const actionText = isBuying ? "You pay the server" : "Server pays you";
 // Calculate for input amount, 32, 64, 128
 const amounts = [amount, 32, 64, 128].filter((v, i, a) => a.indexOf(v) === i); // dedupe if amount is 32/64/128
-
 const lines = amounts.map(n => `**${formatNumber(n)}x** → **${formatNumber(n * priceEach)}**`);
+
 const embed = new EmbedBuilder()
 .setColor(color)
 .setTitle(`${emoji} Spawner ${isBuying ? "Purchase" : "Sale"} Calculator`)
@@ -446,10 +488,10 @@ const embed = new EmbedBuilder()
 { name: " Type", value: label, inline: false },
 { name: " New Price", value: formatNumber(price), inline: true },
 { name: " Updated by", value: `<@${interaction.user.id}>`, inline: true }
-
 )
 .setFooter({
 text: `Current prices — Buy: ${formatNumber(cfg.spawnerBuyPrice)} | Sell: ${formatNumber(cfg.spawnerSellPrice)}`
+
 })
 .setTimestamp();
 return interaction.reply({ embeds: [embed] });
@@ -489,10 +531,10 @@ return interaction.channel.send({ embeds: [embed] });
 // ==========================================================
 // DONUT SMP: /stats
 // ==========================================================
-
 if (commandName === "stats") {
 const username = interaction.options.getString("username");
 await interaction.deferReply();
+
 const result = await donutAPI(`/v1/stats/${encodeURIComponent(username)}`);
 if (!result.ok) {
 return interaction.editReply({ embeds: [errorEmbed(result.message)] });
@@ -530,9 +572,9 @@ if (!result.ok) {
 return interaction.editReply({ embeds: [errorEmbed(result.message)] });
 }
 const p = result.data.result;
-
 const embed = new EmbedBuilder()
 .setColor(0x9b59b6)
+
 .setTitle(` Lookup — ${p.username ?? username}`)
 .setThumbnail(`https://mc-heads.net/avatar/${encodeURIComponent(username)}/64`)
 .addFields(
@@ -571,10 +613,10 @@ const ts = entry.listed_at ?? entry.createdAt ?? entry.timestamp ?? null;
 if (ts !== null) {
 const ms = typeof ts === "number" && ts > 1e10 ? ts : Number(ts) * 1000;
 return ms >= oneDayAgo;
-
 }
 if (entry.time_left !== undefined && entry.time_left !== null) {
 const tl = Number(entry.time_left);
+
 return tl > 0 && tl <= 86400;
 }
 return true;
@@ -612,9 +654,9 @@ const page = interaction.options.getInteger("page") ?? 1;
 await interaction.deferReply();
 const result = await donutAPI(`/v1/auction/transactions/${page}`);
 if (!result.ok) {
-
 return interaction.editReply({ embeds: [errorEmbed(result.message)] });
 }
+
 const transactions = result.data.result;
 if (!transactions || transactions.length === 0) {
 return interaction.editReply({
@@ -653,9 +695,9 @@ const result = await donutAPI(`/v1/leaderboards/${type}/${page}`);
 if (!result.ok) {
 return interaction.editReply({ embeds: [errorEmbed(result.message)] });
 }
-
 const entries = result.data.result;
 if (!entries || entries.length === 0) {
+
 return interaction.editReply({
 embeds: [errorEmbed("No leaderboard data found for that page.")],
 });
@@ -692,7 +734,6 @@ const embed = new EmbedBuilder()
 .setFooter({ text: `Page ${page}` })
 .setTimestamp();
 return interaction.editReply({ embeds: [embed] });
-
 }
 
 // ==========================================================
@@ -733,10 +774,10 @@ flags: MessageFlags.Ephemeral,
 }
 let vouchChannel;
 try {
-
 vouchChannel = interaction.guild.channels.cache.get(vouchChannelId)
 ?? await interaction.guild.channels.fetch(vouchChannelId);
 } catch {
+
 return interaction.reply({
 embeds: [errorEmbed("Could not find the vouch channel. Use `/setupvouch` to reconfigure it.")],
 flags: MessageFlags.Ephemeral,
@@ -776,10 +817,10 @@ flags: MessageFlags.Ephemeral,
 if (commandName === "vouchcount") {
 const target = interaction.options.getUser("user") ?? interaction.user;
 const vouches = vouchStore.get(target.id) ?? [];
-
 const count = vouches.length;
 return interaction.reply({
 embeds: [
+
 new EmbedBuilder()
 .setColor(0x1e40af)
 .setTitle(`Vouches for ${target.username}`)
@@ -820,10 +861,10 @@ new EmbedBuilder()
 .setDescription(`This channel has been locked by <@${interaction.user.id}>.
 **Reason:** ${reason}`)
 .setTimestamp(),
-
 ],
 });
 } else {
+
 await channel.permissionOverwrites.edit(interaction.guild.roles.everyone, {
 SendMessages: null,
 });
@@ -864,10 +905,10 @@ new TextInputBuilder()
 .setMaxLength(256)
 ),
 new ActionRowBuilder().addComponents(
-
 new TextInputBuilder()
 .setCustomId("embed_description")
 .setLabel("Description")
+
 .setStyle(TextInputStyle.Paragraph)
 .setPlaceholder("Enter description. Use :emoji_name: for emojis, **bold**, _italic_, etc.")
 .setRequired(true)
@@ -909,9 +950,9 @@ console.error(" purge error:", err);
 return interaction.editReply({
 embeds: [errorEmbed("Failed to delete messages. Messages older than 14 days cannot be bulk deleted.")],
 });
+}
+}
 
-}
-}
 // ==========================================================
 // TICKET RENAME: /ticketrename
 // ==========================================================
@@ -952,10 +993,10 @@ flags: MessageFlags.Ephemeral,
 });
 }
 }
-
 // ==========================================================
 // TICKET USER ADD: /ticketuseradd
 // ==========================================================
+
 if (commandName === "ticketuseradd") {
 const target = interaction.options.getUser("user");
 const channel = interaction.channel;
@@ -997,10 +1038,10 @@ flags: MessageFlags.Ephemeral,
 // ==========================================================
 if (commandName === "ticketuserremove") {
 const target = interaction.options.getUser("user");
-
 const channel = interaction.channel;
 const guildCfg3 = getGuildConfig(interaction.guildId);
 const customPfx3 = (guildCfg3.ticketTypes ?? []).map(t => (t.prefix ?? t.name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "")) + "-");
+
 const ticketPrefixes = ["support-","giveaway-","spawner-","partnership-","member-report-","staff-report-","building-","mysterybox-", ...customPfx3];
 const isTicket = ticketPrefixes.some(p => channel.name.startsWith(p));
 if (!isTicket) {
@@ -1042,10 +1083,10 @@ if (!msg) {
 return interaction.reply({
 embeds: [errorEmbed("No pricing has been set yet. The founder needs to use `/pricingset`.")],
 flags: MessageFlags.Ephemeral,
-
 });
 }
 return interaction.reply({
+
 embeds: [
 new EmbedBuilder()
 .setColor(0x1e40af)
@@ -1087,9 +1128,9 @@ return interaction.showModal(modal);
 // ==========================================================
 // INVITE — alias for pricing
 // ==========================================================
-
 // handled inside pricing block above
 // ==========================================================
+
 // SERVER ALL: /serverall
 // ==========================================================
 if (commandName === "serverall") {
@@ -1131,10 +1172,10 @@ const unit = match[3] ?? "s";
 const map = { s: 1, m: 60, h: 3600 };
 seconds = Math.round(val * map[unit]);
 }
-
 if (seconds > 21600) return interaction.reply({ embeds: [errorEmbed("Maximum slowmode is 6 hours (21600 seconds).")], flags: MessageFlags.Ephemeral });
 try {
 await interaction.channel.setRateLimitPerUser(seconds);
+
 return interaction.reply({
 embeds: [
 new EmbedBuilder()
@@ -1176,9 +1217,9 @@ new EmbedBuilder()
 .setThumbnail(target.displayAvatarURL({ forceStatic: false }) ?? null)
 .setTimestamp(),
 ],
-
 });
 }
+
 // ==========================================================
 // SERVER INFO: /serverinfo
 // ==========================================================
@@ -1222,10 +1263,10 @@ const joined = member ? Math.floor(member.joinedTimestamp / 1000) : null;
 const roles = member ? member.roles.cache.filter(r => r.id !== interaction.guild.id).map(r => `<@&${r.id}>`).join(" ") || "None" : "Not in server";
 return interaction.reply({
 embeds: [
-
 new EmbedBuilder()
 .setColor(0x1e40af)
 .setTitle(`${target.username}`)
+
 .setThumbnail(target.displayAvatarURL({ forceStatic: false }) ?? null)
 .addFields(
 { name: " Account Created", value: `<t:${created}:R>`, inline: true },
@@ -1268,10 +1309,10 @@ new EmbedBuilder()
 // ==========================================================
 // INVITE TRACKER: /invitetracker
 // ==========================================================
-
 if (commandName === "invitetracker") {
 if (!interaction.guild) return interaction.reply({ embeds: [errorEmbed("This command can only be used in a server.")], flags: MessageFlags.Ephemeral });
 const period = interaction.options.getString("period") ?? "all";
+
 const data = inviteTracker.get(interaction.guildId) ?? { joins: [], leaves: [] };
 const now = Date.now();
 const cutoffs = { "24h": 86400000, "week": 604800000, "month": 2592000000, "all": 0 };
@@ -1311,10 +1352,10 @@ dbSaveScamVouch(target.id);
 return interaction.reply({
 embeds: [
 new EmbedBuilder()
-
 .setColor(0xe74c3c)
 .setTitle(" Scam Vouch Added")
 .setDescription(`<@${target.id}> has been marked as a scammer.
+
 **Reason:** ${reason}
 **Total scam vouches:** ${scams.length}`)
 .setFooter({ text: `Added by ${interaction.user.username}` })
@@ -1356,9 +1397,9 @@ return interaction.reply({ embeds: [errorEmbed("Only the founder can use this co
 const isLock = commandName === "lockdown";
 await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 const textChannels = interaction.guild.channels.cache.filter(c => c.type === ChannelType.GuildText);
-
 let success = 0, failed = 0;
 for (const [, ch] of textChannels) {
+
 try {
 await ch.permissionOverwrites.edit(interaction.guild.roles.everyone, { SendMessages: isLock ? false : null });
 success++;
@@ -1398,10 +1439,10 @@ const embed = new EmbedBuilder()
 .setTitle(" DonutSMP Universe — Bot Commands")
 .addFields(
 { name: " Moderation", value: "`/ban` `/unban` `/kick` `/timeout` `/untimeout` `/purge` `/slowmode` `/lockchannel` `/lockdown` `/unlockdown`", inline: false },
-
 { name: " Roles", value: "`/addrole` `/removerole` `/stafflist`", inline: false },
 { name: " Embeds", value: "`/embed` `/embedorganized`", inline: false },
 { name: " Giveaways", value: "`/giveaway` `/giveawaydork` `/giveawaysos` `/giveawayend` `/giveawaytrack` `/giveawayleaderboard` `/giveawaytracking`", inline: false },
+
 { name: " Vouches", value: "`/vouch` `/vouchcount` `/vouchleaderboard` `/scamvouch`", inline: false },
 { name: " Tickets", value: "`/ticketpanelsend` `/close` `/ticketrename` `/ticketuseradd` `/ticketuserremove`", inline: false },
 { name: " Applications", value: "`/applicationpanelsend`", inline: false },
@@ -1444,10 +1485,10 @@ return interaction.reply({ embeds: [new EmbedBuilder().setColor(0x1e40af).setTit
 if (commandName === "giveawayleaderboard") {
 const embed = buildGiveawayValueLeaderboard(interaction.guildId, "all");
 const lbMsg = await interaction.reply({ embeds: [embed], fetchReply: true });
-
 if (!liveLeaderboards.has(interaction.guildId)) liveLeaderboards.set(interaction.guildId, {});
 liveLeaderboards.get(interaction.guildId).gwvalue = { channelId: interaction.channelId, messageId: lbMsg.id, period: "all" };
 dbSaveLiveLeaderboards(interaction.guildId);
+
 return;
 }
 // ── /stafflist ─────────────────────────────────────────────
@@ -1487,10 +1528,10 @@ const lines = [];
 for (const [gId, data] of premiumGuilds.entries()) {
 const g = client.guilds.cache.get(gId);
 lines.push(`**${g?.name ?? gId}** (\`${gId}\`) — activated by <@${data.activatedBy}>`);
-
 }
 const buttons = [];
 let i = 0;
+
 for (const [gId] of premiumGuilds.entries()) {
 if (i >= 5) break; // Discord max 5 buttons per row
 buttons.push(new ButtonBuilder().setCustomId(`removeprem_${gId}`).setLabel(client.guilds.cache.get(gId)?.name?.slice(0,20) ?? gId).setStyle(ButtonStyle.Danger));
@@ -1533,9 +1574,9 @@ modal.addComponents(new ActionRowBuilder().addComponents(
 new TextInputBuilder().setCustomId("message_text").setLabel("Message").setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(2000)
 ));
 return interaction.showModal(modal);
-
 }
 // ── /weeklypayment ────────────────────────────────────────
+
 if (commandName === "weeklypayment") return handleWeeklyPayment(interaction);
 if (commandName === "weeklypaymentpost") return handleWeeklyPaymentPost(interaction);
 
@@ -1575,10 +1616,10 @@ new EmbedBuilder()
 { name: " Staff Apps", value: cfg.staffAppChannelId ? "<#" + cfg.staffAppChannelId + ">" : "Not set", inline: true },
 { name: " PM Apps", value: cfg.pmAppChannelId ? "<#" + cfg.pmAppChannelId + ">" : "Not set", inline: true },
 { name: " Staff Role", value: cfg.staffRoleId ? "<@&" + cfg.staffRoleId + ">" : "Not set", inline: true },
-
 { name: " Helper Role", value: cfg.helperRoleId ? "<@&" + cfg.helperRoleId + ">" : "Not set", inline: true },
 { name: " PM Role", value: cfg.pmRoleId ? "<@&" + cfg.pmRoleId + ">" : "Not set", inline: true },
 { name: " Ticket Staff Role",value: cfg.ticketStaffRoleId ? "<@&" + cfg.ticketStaffRoleId + ">" : "Not set", inline: true },
+
 { name: " Spawner Buy", value: formatNumber(cfg.spawnerBuyPrice), inline: true },
 { name: " Spawner Sell", value: formatNumber(cfg.spawnerSellPrice), inline: true },
 { name: " Ticket Buttons", value: ticketSummary, inline: false },
@@ -1620,10 +1661,10 @@ embeds:[new EmbedBuilder().setColor(0x5865f2).setTitle(" Partner Tracking")
 "** From Now** — Track only new partners\n\n" +
 "Partner channel: <#"+cfg.partnerChannelId+">\n" +
 "Period: **"+(labels[period]??"Last 7 Days")+"**"
-
 ).setTimestamp()],
 components:[new ActionRowBuilder().addComponents(
 new ButtonBuilder().setCustomId("ptrack_show_"+period).setLabel(" Only Show").setStyle(ButtonStyle.Secondary),
+
 new ButtonBuilder().setCustomId("ptrack_continue_"+period).setLabel(" Continue Tracking").setStyle(ButtonStyle.Primary),
 new ButtonBuilder().setCustomId("ptrack_fromnow_"+period).setLabel(" From Now").setStyle(ButtonStyle.Success),
 )],
@@ -1663,10 +1704,10 @@ return;
 console.error(` Error handling command "${commandName}":`, err);
 const reply = { embeds: [errorEmbed("Something went wrong. Please try again.")], flags: MessageFlags.Ephemeral };
 if (interaction.replied || interaction.deferred) {
-
 return interaction.followUp(reply);
 }
 return interaction.reply(reply);
+
 }
 });
 // ============================================================
@@ -1706,10 +1747,10 @@ return new EmbedBuilder()
 .setFooter({ text: buttons.length + "/7 buttons • Select menus appear when a button is expanded • Save when done" })
 .setTimestamp();
 }
-
 function buildTicketSetupRows(session, guild) {
 const buttons = session.ticketButtons || [];
 const rows = [];
+
 // Row 1: toggle buttons (slots 1-4)
 if (buttons.length > 0) {
 const row1 = new ActionRowBuilder();
@@ -1751,10 +1792,10 @@ new StringSelectMenuOptionBuilder()
 rows.push(new ActionRowBuilder().addComponents(
 new StringSelectMenuBuilder()
 .setCustomId("tsetup_cat_" + ei)
-
 .setPlaceholder(" Pick a category for this ticket type")
 .addOptions(catOptions)
 ));
+
 } else {
 // No categories cached yet — show a note in the embed, no crash
 }
@@ -1795,9 +1836,9 @@ new ButtonBuilder().setCustomId("tsetup_save").setLabel(" Save All").setStyle(Bu
 );
 }
 if (actionRow.components.length > 0) rows.push(actionRow);
-
 return rows.slice(0, 5); // Discord max 5 rows
 }
+
 // ─────────────────────────────────────────────────────────────
 // APP SETUP HELPERS
 // ─────────────────────────────────────────────────────────────
@@ -1839,10 +1880,10 @@ const rows = [];
 if (apps.length > 0) {
 const toggleRow = new ActionRowBuilder();
 apps.forEach((a, i) => {
-
 toggleRow.addComponents(
 new ButtonBuilder()
 .setCustomId("asetup_toggle_" + i)
+
 .setLabel((session.expandedApp === i ? "▼ " : "▶ ") + (a.name || "App " + (i + 1)).slice(0, 15))
 .setStyle(session.expandedApp === i ? ButtonStyle.Primary : ButtonStyle.Secondary)
 );
@@ -1883,10 +1924,10 @@ new ButtonBuilder().setCustomId("asetup_add").setLabel(" Add Application").setSt
 );
 }
 if (ei !== null && ei !== undefined && apps[ei]) {
-
 actionRow.addComponents(
 new ButtonBuilder().setCustomId("asetup_edit_" + ei).setLabel(" Edit Questions").setStyle(ButtonStyle.Primary),
 new ButtonBuilder().setCustomId("asetup_delete_" + ei).setLabel(" Delete").setStyle(ButtonStyle.Danger)
+
 );
 }
 if (apps.length > 0) {
@@ -1927,10 +1968,10 @@ new RoleSelectMenuBuilder()
 .setCustomId("setuproles_staff")
 .setPlaceholder(" Staff Role — moderators, admins")
 .setMinValues(0).setMaxValues(1)
-
 ),
 new ActionRowBuilder().addComponents(
 new RoleSelectMenuBuilder()
+
 .setCustomId("setuproles_helper")
 .setPlaceholder(" Helper Role — junior staff")
 .setMinValues(0).setMaxValues(1)
@@ -1972,10 +2013,10 @@ const session = setupSessions.get(sessionKey);
 if (!session) return interaction.reply({ embeds: [errorEmbed("Something went wrong. Please try again.")], flags: MessageFlags.Ephemeral });
 return interaction.reply({
 embeds: [buildTicketSetupEmbed(session, interaction.guild?.name ?? "this server")],
-
 components: buildTicketSetupRows(session, interaction.guild),
 flags: MessageFlags.Ephemeral,
 });
+
 }
 async function handleSetupApps(interaction) {
 const sessionKey = interaction.user.id + "_" + interaction.guildId + "_apps";
@@ -2014,10 +2055,10 @@ components: buildTicketSetupRows(session, interaction.guild),
 });
 }
 // Add new button → modal (name + welcome message only)
-
 if (cid === "tsetup_add") {
 if (session.ticketButtons.length >= 7) {
 return interaction.reply({ embeds: [errorEmbed("Maximum 7 buttons reached.")], flags: MessageFlags.Ephemeral });
+
 }
 const idx = session.ticketButtons.length;
 return interaction.showModal(
@@ -2061,10 +2102,10 @@ const idx = parseInt(cid.replace("tsetup_edit_", ""));
 const btn = session.ticketButtons[idx];
 if (!btn) return interaction.reply({ embeds: [errorEmbed("Button not found.")], flags: MessageFlags.Ephemeral });
 return interaction.showModal(
-
 new ModalBuilder()
 .setCustomId("tsetup_modal_edit_" + idx)
 .setTitle("Edit Button " + (idx + 1) + ": " + btn.name.slice(0, 30))
+
 .addComponents(
 new ActionRowBuilder().addComponents(
 new TextInputBuilder()
@@ -2108,9 +2149,9 @@ new TextInputBuilder()
 .setValue(btn.color || "Blue")
 ),
 )
-
 );
 }
+
 // Delete
 if (cid.startsWith("tsetup_delete_")) {
 const idx = parseInt(cid.replace("tsetup_delete_", ""));
@@ -2153,9 +2194,9 @@ components: [],
 // ══ APP BUTTONS ═════════════════════════════════════════════
 if (cid.startsWith("asetup_")) {
 const sessionKey = interaction.user.id + "_" + interaction.guildId + "_apps";
-
 const session = setupSessions.get(sessionKey);
 if (!session) return interaction.reply({ embeds: [errorEmbed("Session expired — run `/setupapps` again.")], flags: MessageFlags.Ephemeral });
+
 if (cid.startsWith("asetup_toggle_")) {
 const idx = parseInt(cid.replace("asetup_toggle_", ""));
 session.expandedApp = session.expandedApp === idx ? null : idx;
@@ -2198,10 +2239,10 @@ new TextInputBuilder()
 if (cid.startsWith("asetup_edit_")) {
 const idx = parseInt(cid.replace("asetup_edit_", ""));
 const app = session.appTypes[idx];
-
 if (!app) return interaction.reply({ embeds: [errorEmbed("App not found.")], flags: MessageFlags.Ephemeral });
 return interaction.showModal(
 new ModalBuilder()
+
 .setCustomId("asetup_modal_edit_" + idx)
 .setTitle("Edit Questions — " + app.name.slice(0, 30))
 .addComponents(
@@ -2244,10 +2285,10 @@ const summary = cfg.appTypes
 ? cfg.appTypes.map((a, i) => (i + 1) + ". **" + a.name + "** → " + (a.questions?.length || 0) + " questions").join("\n")
 : "Reset to defaults.";
 return interaction.update({
-
 embeds: [
 new EmbedBuilder()
 .setColor(0x2ecc71)
+
 .setTitle(" Application Setup Saved!")
 .setDescription("Your application types have been saved:\n\n" + summary + "\n\nRun `/applicationpanelsend` to post the updated panel.")
 .setTimestamp(),
@@ -2287,10 +2328,10 @@ new ButtonBuilder().setCustomId("setupwelcome_disable").setLabel(" Disable Welco
 ],
 });
 }
-
 // ── Vouch: channel select ───────────────────────────────────
 if (cid === "setupvouch_channel") {
 if (!interaction.values?.length) return interaction.update({});
+
 const cfg = getGuildConfig(interaction.guildId);
 cfg.vouchChannelId = interaction.values[0];
 dbSaveGuildConfig(interaction.guildId);
@@ -2334,10 +2375,10 @@ return interaction.update(buildRolesSetupMessage(interaction.guild, getGuildConf
 }
 if (cid === "setuproles_ticketstaff") {
 const cfg = getGuildConfig(interaction.guildId);
-
 cfg.ticketStaffRoleId = interaction.values[0] ?? null;
 dbSaveGuildConfig(interaction.guildId);
 return interaction.update(buildRolesSetupMessage(interaction.guild, getGuildConfig(interaction.guildId)));
+
 }
 if (cid === "setuproles_staffappschan") {
 const cfg = getGuildConfig(interaction.guildId);
@@ -2379,9 +2420,9 @@ if (cid==="setupchannels_raidwarnings") {
 if (!interaction.values?.length) return interaction.update({});
 const cfg=getGuildConfig(interaction.guildId); cfg.raidWarningsChannelId=interaction.values[0]; dbSaveGuildConfig(interaction.guildId);
 return interaction.update({embeds:[new EmbedBuilder().setColor(0x2ecc71).setTitle(" Raid Warnings Set").setDescription(" Raid warnings channel: <#"+cfg.raidWarningsChannelId+">").setTimestamp()],components:[]});
-
 }
 if (cid==="setupchannels_ticketlogs") {
+
 if (!interaction.values?.length) return interaction.update({});
 const cfg=getGuildConfig(interaction.guildId); cfg.ticketLogsChannelId=interaction.values[0]; dbSaveGuildConfig(interaction.guildId);
 return interaction.update({embeds:[new EmbedBuilder().setColor(0x2ecc71).setTitle(" Ticket Logs Set").setDescription(" Ticket logs channel: <#"+cfg.ticketLogsChannelId+">").setTimestamp()],components:[]});
@@ -2424,9 +2465,9 @@ components: [
 new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId("setupchannels_vouch").setPlaceholder(" Vouch channel").addChannelTypes(ChannelType.GuildText)),
 new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId("setupchannels_partner").setPlaceholder(" Partner channel").addChannelTypes(ChannelType.GuildText)),
 ],
-
 });
 }
+
 if (cid.startsWith("tsetup_cat_")) {
 const idx = parseInt(cid.replace("tsetup_cat_", ""));
 const sessionKey = interaction.user.id + "_" + interaction.guildId + "_tickets";
@@ -2468,10 +2509,10 @@ const idx = parseInt(cid.replace("asetup_channel_", ""));
 const sessionKey = interaction.user.id + "_" + interaction.guildId + "_apps";
 const session = setupSessions.get(sessionKey);
 if (!session) return interaction.reply({ embeds: [errorEmbed("Session expired — run `/setupapps` again.")], flags: MessageFlags.Ephemeral });
-
 session.appTypes[idx].channelId = interaction.values[0] ?? null;
 return interaction.update({
 embeds: [buildAppSetupEmbed(session, interaction.guild?.name ?? "this server")],
+
 components: buildAppSetupRows(session),
 });
 }
@@ -2510,10 +2551,10 @@ const cid = interaction.customId;
 // Anti-raid limits modal
 if (cid==="antiraid_limits_modal") {
 await interaction.deferReply({flags:MessageFlags.Ephemeral});
-
 const cfg=getGuildConfig(interaction.guildId); if(!cfg.antiRaid) cfg.antiRaid={};
 cfg.antiRaid.channelDeleteLimit=parseInt(interaction.fields.getTextInputValue("ar_channel"))||null;
 cfg.antiRaid.roleDeleteLimit=parseInt(interaction.fields.getTextInputValue("ar_role"))||null;
+
 cfg.antiRaid.banLimit=parseInt(interaction.fields.getTextInputValue("ar_ban"))||null;
 cfg.antiRaid.kickLimit=parseInt(interaction.fields.getTextInputValue("ar_kick"))||null;
 cfg.antiRaid.pingLimit=parseInt(interaction.fields.getTextInputValue("ar_ping"))||null;
@@ -2553,10 +2594,10 @@ components: buildTicketSetupRows(session, interaction.guild),
 // ── Ticket: color ────────────────────────────────────────────
 if (cid.startsWith("tsetup_modal_color_")) {
 const idx = parseInt(cid.replace("tsetup_modal_color_", ""));
-
 const sessionKey = interaction.user.id + "_" + interaction.guildId + "_tickets";
 const session = setupSessions.get(sessionKey);
 if (!session) return interaction.reply({ embeds: [errorEmbed("Session expired.")], flags: MessageFlags.Ephemeral });
+
 const colorRaw = interaction.fields.getTextInputValue("t_color").trim().toLowerCase();
 const colorMap = { blue: "Blue", green: "Green", red: "Red", grey: "Grey", gray: "Grey" };
 const color = colorMap[colorRaw] || "Blue";
@@ -2593,7 +2634,6 @@ return false;
 
 // ============================================================
 // index.js — Part 3: Giveaway, Dork Game, Ready, Login
-
 // ============================================================
 
 // ============================================================
@@ -2632,9 +2672,9 @@ const endedEmbed = new EmbedBuilder()
 )
 .setTimestamp();
 await giveawayMsg.edit({ embeds: [endedEmbed], components: [disabledRow] });
-
 // No entries — end with no winner
 if (data.entries.length === 0) {
+
 return channel.send({
 embeds: [
 new EmbedBuilder()
@@ -2674,10 +2714,10 @@ await startDorkGame(channel, winnerIds[0], data.prize, data.maxPrize);
 // ============================================================
 // DORK GAME — START
 // ============================================================
-
 async function startDorkGame(channel, winnerId, prize, maxPrize) {
 const dorkId = `${winnerId}_${Date.now()}`;
 const doubled = typeof prize === "number" ? prize * 2 : null;
+
 // Detect if prize is a numeric value or a text prize
 // For the dork game, prize starts as text on first round,
 // then becomes a number when doubling begins
@@ -2714,9 +2754,9 @@ activeDorks.set(dorkMsg.id, dorkData);
 // ============================================================
 // BUTTON HANDLER (giveaway join + dork keep/double)
 // ============================================================
-
 async function handleButton(interaction) {
 const { customId } = interaction;
+
 // ── Setup system buttons ──────────────────────────────────
 if (customId.startsWith("tsetup_") || customId.startsWith("asetup_")) {
 return handleSetupButton(interaction);
@@ -2759,10 +2799,10 @@ new ActionRowBuilder().addComponents(new RoleSelectMenuBuilder().setCustomId("an
 ],flags:MessageFlags.Ephemeral});
 }
 if (customId==="founder_adduser") {
-
 const modal2 = new ModalBuilder().setCustomId("founder_adduser_modal").setTitle("Add Founder User");
 modal2.addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("founder_userid").setLabel("User IDs (comma-separated)").setStyle(TextInputStyle.Short).setRequired(true).setPlaceholder("e.g. 123456789, 987654321").setMaxLength(500)));
 return interaction.showModal(modal2);
+
 }
 if (customId==="founder_clearusers") {
 const cfg=getGuildConfig(interaction.guildId); cfg.founderUserIds=[]; dbSaveGuildConfig(interaction.guildId);
@@ -2803,10 +2843,10 @@ return interaction.update({
 embeds: [new EmbedBuilder()
 .setColor(cfg.welcomeEnabled ? 0x2ecc71 : 0xe74c3c)
 .setTitle(" Welcome Setup")
-
 .setDescription(
 "**Current config:**\n" +
 "Channel: " + (cfg.welcomeChannelId ? "<#" + cfg.welcomeChannelId + ">" : "not set") + "\n" +
+
 "Enabled: " + status + "\n\n" +
 "Welcome messages are now **" + (cfg.welcomeEnabled ? "enabled" : "disabled") + "**."
 )
@@ -2847,10 +2887,10 @@ embeds: [errorEmbed("This giveaway is no longer active. It may have ended or the
 flags: MessageFlags.Ephemeral,
 });
 }
-
 if (data.entries.includes(interaction.user.id)) {
 return interaction.reply({
 embeds: [errorEmbed("You have already entered this giveaway!")],
+
 flags: MessageFlags.Ephemeral,
 });
 }
@@ -2888,9 +2928,9 @@ embeds: [errorEmbed("Only the giveaway winner can make this choice.")],
 flags: MessageFlags.Ephemeral,
 });
 }
-
 // Remove from active dorks
 activeDorks.delete(messageId);
+
 // Disable all buttons on the dork message
 const disabledKeep = new ButtonBuilder()
 .setCustomId(`dork_keep_${dorkId}`)
@@ -2928,10 +2968,10 @@ if (customId.startsWith("accept_app_")) {
 const rest = customId.replace("accept_app_", "");
 const userId = rest.match(/^(\d+)_/)?.[1];
 const appType = userId ? rest.slice(userId.length + 1) : null;
-
 if (!userId || !appType) return interaction.reply({ embeds: [errorEmbed("Invalid button data.")], flags: MessageFlags.Ephemeral });
 return handleAppAccept(interaction, userId, appType);
 }
+
 // ── Application Deny Button ───────────────────────────────
 if (customId.startsWith("deny_app_")) {
 const rest = customId.replace("deny_app_", "");
@@ -2970,10 +3010,10 @@ flags: MessageFlags.Ephemeral,
 }
 // Only the winner can interact
 if (interaction.user.id !== data.winnerId) {
-
 return interaction.reply({
 embeds: [errorEmbed("Only the giveaway winner can make this choice.")],
 flags: MessageFlags.Ephemeral,
+
 });
 }
 // Calculate new prize
@@ -3012,9 +3052,9 @@ const disabledKeep = new ButtonBuilder()
 const disabledDouble = new ButtonBuilder()
 .setCustomId(`dork_double_${dorkId}`)
 .setLabel(" Double")
-
 .setStyle(ButtonStyle.Danger)
 .setDisabled(true);
+
 const disabledRow = new ActionRowBuilder().addComponents(disabledKeep, disabledDouble);
 await interaction.message.edit({ components: [disabledRow] });
 // Announce the double
@@ -3055,10 +3095,10 @@ Entries: **0**`
 )
 .setFooter({ text: `Max cap: ${formatNumber(data.maxPrize)}` })
 .setTimestamp(newEndsAt);
-
 const newMsg = await interaction.channel.send({ embeds: [newEmbed], components: [new ActionRowBuilder().addComponents(joinBtn)] });
 newGwData.messageId = newMsg.id;
 activeGiveaways.set(newMsg.id, newGwData);
+
 setTimeout(() => endGiveaway(newMsg.id, interaction.channel), dorkDuration);
 }
 }
@@ -3096,10 +3136,10 @@ const mins = Number(raw);
 if (isNaN(mins) || mins <= 0) return "0h";
 const d = Math.floor(mins / 1440);
 const h = Math.floor((mins % 1440) / 60);
-
 if (d > 0 && h > 0) return `${d}d ${h}h`;
 if (d > 0) return `${d}d`;
 return `${h}h`;
+
 }
 // ── Helper: format time_left (seconds) to readable string ────
 function formatTimeLeft(seconds) {
@@ -3138,9 +3178,9 @@ const appEntries = useCustom
 { name: "Staff", customId: "app_staff", style: ButtonStyle.Primary },
 { name: "Partner Manager", customId: "app_pm", style: ButtonStyle.Success },
 ];
-
 const embed = new EmbedBuilder()
 .setColor(0x5865f2)
+
 .setTitle(` Applications — ${guildName}`)
 .setDescription(
 `Feel free to apply for staff in **${guildName}** down below!\n\n` +
@@ -3180,10 +3220,10 @@ reviewChannelId = cfg.staffAppChannelId ?? process.env.STAFF_APP_CHANNEL_ID ?? n
 questions = PM_APP_QUESTIONS;
 label = "Partner Manager";
 reviewChannelId = cfg.pmAppChannelId ?? process.env.PM_APP_CHANNEL_ID ?? null;
-
 } else {
 // Custom app type from /appsetup
 const customType = cfg.appTypes?.find(a => `app_custom_${encodeURIComponent(a.name)}` === type || a.name === type);
+
 if (!customType) {
 return interaction.reply({ embeds: [errorEmbed("Application type not found.")], flags: MessageFlags.Ephemeral });
 }
@@ -3226,9 +3266,9 @@ embeds: [errorEmbed(
 flags: MessageFlags.Ephemeral,
 });
 }
-
 // Store the session
 activeApplications.set(user.id, {
+
 type,
 questions,
 answers: [],
@@ -3270,9 +3310,9 @@ dbLogTicketStat(message.guild.id, message.author.id, "respond", message.channel.
 }
 }
 }
-
 }
 // ── Partner link tracking (guild messages only) ────────────
+
 if (message.guild && message.channel.type === ChannelType.GuildText) {
 const cfg = getGuildConfig(message.guild.id);
 // Anti-raid ping detection — any role ping or @everyone/@here
@@ -3312,9 +3352,9 @@ return; // Don't process guild messages for applications
 }
 // DM-only from here
 if (message.channel.type !== ChannelType.DM) return;
-
 const session = activeApplications.get(message.author.id);
 if (!session) return; // Not in an active application
+
 // Stale session guard — expire after 30 minutes of inactivity
 if (Date.now() - session.startedAt > 30 * 60 * 1000) {
 activeApplications.delete(message.author.id);
@@ -3355,10 +3395,10 @@ new EmbedBuilder()
 .setDescription(
 `Your **${session.label}** application has been submitted successfully!\n\n` +
 `The management team will review it and get back to you. ` +
-
 `Do **not** ask about your application status — doing so will result in an **instant denial**.`
 )
 .setTimestamp(),
+
 ],
 });
 // Fetch the submission channel — use reviewChannelId stored in session
@@ -3395,10 +3435,10 @@ inline: false,
 submissionEmbed.setFooter({ text: `User ID: ${message.author.id}` });
 // Accept / Deny buttons
 const actionRow = new ActionRowBuilder().addComponents(
-
 new ButtonBuilder()
 .setCustomId(`accept_app_${message.author.id}_${session.type}`)
 .setLabel(" Accept")
+
 .setStyle(ButtonStyle.Success),
 new ButtonBuilder()
 .setCustomId(`deny_app_${message.author.id}_${session.type}`)
@@ -3438,10 +3478,10 @@ if (gCfg.pmRoleId) roleIds.push(gCfg.pmRoleId);
 if (gCfg.staffRoleId) roleIds.push(gCfg.staffRoleId);
 } else {
 // Custom app type — use the roleId stored in appTypes config
-
 const customApp = gCfg.appTypes?.find(a => a.name.toLowerCase() === appType.toLowerCase());
 if (customApp?.roleId) roleIds.push(customApp.roleId);
 }
+
 // Assign roles
 const assignedRoles = [];
 const failedRoles = [];
@@ -3482,10 +3522,10 @@ new ButtonBuilder()
 .setCustomId(`accept_app_${userId}_${appType}`)
 .setLabel(" Accepted")
 .setStyle(ButtonStyle.Success)
-
 .setDisabled(true),
 new ButtonBuilder()
 .setCustomId(`deny_app_${userId}_${appType}`)
+
 .setLabel(" Deny")
 .setStyle(ButtonStyle.Danger)
 .setDisabled(true),
@@ -3524,9 +3564,9 @@ const reasonInput = new TextInputBuilder()
 .setRequired(true)
 .setMaxLength(500);
 modal.addComponents(new ActionRowBuilder().addComponents(reasonInput));
-
 return interaction.showModal(modal);
 }
+
 // ── Handler: process deny reason modal ───────────────────────
 async function handleDenyReasonModal(interaction, userId, appType) {
 const reason = interaction.fields.getTextInputValue("deny_reason");
@@ -3566,9 +3606,9 @@ new ButtonBuilder()
 .setDisabled(true),
 );
 await interaction.message.edit({ components: [disabledRow] }).catch(() => {});
-
 return interaction.editReply({
 embeds: [
+
 new EmbedBuilder()
 .setColor(0xe74c3c)
 .setTitle(" Application Denied")
@@ -3608,9 +3648,9 @@ report_member: "Please describe the situation in detail including any evidence y
 report_staff: "Please describe the situation in detail including any evidence you have.",
 building: "Please describe what you need built and any details about the project.",
 mysterybox: "Please describe your mystery box issue. Staff will assist you shortly.",
-
 };
 const guildName = guild?.name ?? "this server";
+
 const desc = customMsg ?? descriptions[type] ?? "A staff member will be with you shortly.";
 return new EmbedBuilder()
 .setColor(0x5865f2)
@@ -3648,10 +3688,10 @@ const ticketTypes = cfg.ticketTypes && cfg.ticketTypes.length > 0
 { name: "Building", customId: "ticket_building", style: ButtonStyle.Secondary },
 { name: " Mystery Box", customId: "ticket_mysterybox", style: ButtonStyle.Success },
 ];
-
 // Split into rows of 4 max
 const rows = [];
 for (let i = 0; i < Math.min(ticketTypes.length, 20); i += 4) {
+
 const chunk = ticketTypes.slice(i, i + 4);
 rows.push(
 new ActionRowBuilder().addComponents(
@@ -3692,10 +3732,10 @@ questions: customType.questions ?? [],
 pingRoleIds: customType.pingRoleIds ?? [],
 };
 } else {
-
 // Default ticket types
 const typeMap = {
 support: { category: TICKET_CATEGORIES.support, prefix: "support" },
+
 giveaway: { category: TICKET_CATEGORIES.giveaway, prefix: "giveaway" },
 spawner: { category: TICKET_CATEGORIES.spawner, prefix: "spawner" },
 partnership: { category: TICKET_CATEGORIES.partnership, prefix: "partnership" },
@@ -3736,9 +3776,9 @@ flags: MessageFlags.Ephemeral,
 });
 }
 // Get ticket staff role from per-guild config
-
 const ticketStaffRoleId = cfg.ticketStaffRoleId;
 // Build permission overwrites
+
 const permissionOverwrites = [
 {
 // @everyone cannot see the channel
@@ -3781,10 +3821,10 @@ PermissionsBitField.Flags.ManageMessages,
 // Add extra viewer roles (can see ticket but not manage)
 if (config.viewerRoleIds?.length) {
 config.viewerRoleIds.forEach(roleId => {
-
 if (roleId && roleId !== ticketStaffRoleId) {
 permissionOverwrites.push({
 id: roleId,
+
 allow: [
 PermissionsBitField.Flags.ViewChannel,
 PermissionsBitField.Flags.SendMessages,
@@ -3825,10 +3865,10 @@ if (config.pingRoleIds) config.pingRoleIds.forEach(r => { if (r !== ticketStaffR
 const openCfg = getGuildConfig(interaction.guildId);
 if (openCfg.ticketLogsChannelId) {
 client.channels.fetch(openCfg.ticketLogsChannelId).then(lc => {
-
 if (lc) lc.send({ embeds: [new EmbedBuilder().setColor(0x2ecc71).setTitle(" Ticket Opened")
 .addFields(
 { name: "Channel", value: "<#" + ticketChannel.id + ">", inline: true },
+
 { name: "Opener", value: "<@" + user.id + ">", inline: true },
 { name: "Type", value: String(type), inline: true },
 ).setTimestamp()] }).catch(()=>{});
@@ -3869,10 +3909,10 @@ flags: MessageFlags.Ephemeral,
 });
 }
 // ── Handler: close ticket modal submission ───────────────────
-
 async function handleTicketClose(interaction, channelId) {
 // Close immediately in one tap — no modal needed
 return handleTicketCloseModal(interaction, channelId, "Closed by staff");
+
 }
 
 // ── Handler: process ticket close modal ─────────────────────
@@ -3913,10 +3953,10 @@ if (openerUserId) {
 try {
 const opener = await client.users.fetch(openerUserId).catch(()=>null);
 if (opener) await opener.send({ embeds: [new EmbedBuilder().setColor(0xe74c3c).setTitle(" Your Ticket Was Closed")
-
 .setDescription("Your ticket **" + channel.name + "** was closed by <@" + interaction.user.id + ">.\n\n**Reason:** " + reason).setTimestamp()] }).catch(()=>{});
 } catch {}
 }
+
 // Log to ticket logs channel with transcript
 const cfg2 = getGuildConfig(interaction.guildId);
 if (cfg2.ticketLogsChannelId) {
@@ -3954,9 +3994,9 @@ client.on("guildMemberAdd", async (member) => {
 // Track join in invite tracker
 const trackerData = inviteTracker.get(member.guild.id) ?? { joins: [], leaves: [] };
 trackerData.joins.push({ userId: member.id, timestamp: Date.now() });
-
 inviteTracker.set(member.guild.id, trackerData);
 // Welcome message
+
 const cfg = getGuildConfig(member.guild.id);
 if (!cfg.welcomeEnabled) return;
 const welcomeChannelId = cfg.welcomeChannelId;
@@ -3994,10 +4034,10 @@ trackerData.leaves.push({ userId: member.id, timestamp: Date.now() });
 inviteTracker.set(member.guild.id, trackerData);
 dbSaveInviteTracker(member.guild.id);
 // Anti-raid kick check
-
 const cfg=getGuildConfig(member.guild.id);
 if (cfg.antiRaid?.kickLimit) {
 try {
+
 const logs=await member.guild.fetchAuditLogs({type:20,limit:1}).catch(()=>null);
 const e=logs?.entries.first();
 if (e&&e.target?.id===member.id&&Date.now()-e.createdTimestamp<5000) {
@@ -4036,10 +4076,10 @@ if (type==="gwvalue") embed = buildGiveawayValueLeaderboard(guildId, info.period
 if (type==="partnerSession") { await refreshPartnerSession(guildId,info).catch(()=>{}); continue; }
 if (embed) await msg.edit({embeds:[embed]}).catch(()=>{});
 } catch {}
-
 }
 }
 }, 5*60*1000);
+
 });
 
 // ============================================================
@@ -4077,9 +4117,9 @@ return new EmbedBuilder()
 }
 function buildGiveawayTrackingLeaderboard(guildId, period) {
 const cutoff = getPeriodCutoff(period);
-
 const labels = { week: "Last 7 Days", month: "Last Month", all: "All Time" };
 const prefix = guildId + ":";
+
 const entries = [];
 for (const [key, val] of giveawayHostCounts.entries()) {
 if (!key.startsWith(prefix)) continue;
@@ -4116,10 +4156,10 @@ return { userId, count: filtered.length };
 })
 .filter(e => e.count > 0)
 .sort((a, b) => b.count - a.count);
-
 if (sorted.length === 0) {
 return new EmbedBuilder().setColor(0xe74c3c).setTitle(" Vouch Leaderboard")
 .setDescription("No vouches recorded in this period.")
+
 .setTimestamp();
 }
 const medals = [" "," "," "];
@@ -4157,9 +4197,9 @@ if (embed) await msg.edit({ embeds: [embed] }).catch(() => {});
 } catch { /* ignore refresh errors */ }
 }
 }
-
 }, 5 * 60 * 1000);
 // ============================================================
+
 // GIVEAWAY SOS
 // ============================================================
 async function handleSplitOrStealStart(interaction) {
@@ -4198,10 +4238,10 @@ endsAt,
 hostId: interaction.user.id,
 channelId: interaction.channelId,
 guildId: interaction.guildId,
-
 entries: [],
 isSplitOrSteal: true,
 };
+
 const joinBtn = new ButtonBuilder()
 .setCustomId("giveaway_join")
 .setLabel("Enter Giveaway")
@@ -4237,9 +4277,9 @@ dbDeleteActiveGiveaway(messageId);
 const prizeDisplay = data.prizeDisplay ?? (data.isNumericPrize ? formatNumber(data.prize) : (data.prizeStr ?? String(data.prize)));
 if (data.entries.length === 0) {
 return channel.send({ embeds: [new EmbedBuilder().setColor(0x95a5a6).setTitle(" Giveaway Ended").setDescription(`No entries for **${prizeDisplay}**. No winners.`).setTimestamp()] });
-
 }
 const shuffled = [...data.entries].sort(() => Math.random() - 0.5);
+
 const winnerIds = shuffled.slice(0, Math.min(data.numWinners, shuffled.length));
 const perPerson = data.isNumericPrize ? data.prize / winnerIds.length : null;
 // Announce winners in channel
@@ -4278,10 +4318,10 @@ resultDesc = ` **Everyone split!** Each winner receives **${formatNumber(perPers
 } else {
 const names = splitters.map(id => `<@${id}>`).join(" and ");
 resultDesc = ` ${names} chose split! The prize **${prizeDisplay}** will be split between them!`;
-
 }
 resultColor = 0x2ecc71;
 } else if (stealers.length > 0 && splitters.length === 0 && timeouts.length === 0) {
+
 // Everyone stole — nobody wins
 const names = stealers.map(id => `<@${id}>`).join(" and ");
 resultDesc = ` ${names} stole — no one wins!`;
@@ -4325,9 +4365,9 @@ embeds: [new EmbedBuilder()
 .setTimestamp()],
 });
 }
-
 async function dmSplitOrSteal(userId, totalPrize, perPerson, totalWinners, claimMs, responses, prizeDisplay) {
 // prizeDisplay is the human-readable prize (could be number or item name)
+
 if (!prizeDisplay) prizeDisplay = typeof totalPrize === "number" ? formatNumber(totalPrize) : String(totalPrize);
 try {
 const user = await client.users.fetch(userId).catch(() => null);
@@ -4368,10 +4408,10 @@ clearTimeout(timeout);
 responses.set(userId, choice);
 await msg.edit({
 embeds: [new EmbedBuilder()
-
 .setColor(choice === "split" ? 0x2ecc71 : 0xe74c3c)
 .setTitle(choice === "split" ? " You chose Split!" : " You chose Steal!")
 .setDescription("Your choice has been recorded. Check the giveaway channel for the final results!")
+
 .setTimestamp()],
 components: [],
 }).catch(() => {});
@@ -4410,10 +4450,10 @@ const itemValueStr = interaction.options.getString("itemvalue") ?? null;
 const itemValue = itemValueStr ? parseNumber(itemValueStr) : null;
 const endsAt = Date.now()+durationMs;
 const giveawayData = {
-
 prize, description, maxPrize:null, isDork:false, winnerCount,
 itemValue:(!isNaN(itemValue)&&itemValue>0)?itemValue:null,
 originalDuration:durationMs, endsAt,
+
 hostId:interaction.user.id, channelId:interaction.channelId,
 guildId:interaction.guildId, entries:[],
 };
@@ -4455,10 +4495,10 @@ setTimeout(()=>endGiveaway(msg.id,interaction.channel),durationMs);
 // ============================================================
 function showSetupPanel(interaction) {
 const fn = interaction.replied||interaction.deferred ? "followUp":"reply";
-
 return interaction[fn]({
 embeds:[new EmbedBuilder().setColor(0x5865f2).setTitle(" Bot Setup Panel").setDescription("Click a button below to configure that system. All settings are saved to the database and persist through restarts.").setTimestamp()],
 components:[
+
 new ActionRowBuilder().addComponents(
 new ButtonBuilder().setCustomId("setup_panel_welcome").setLabel(" Welcome").setStyle(ButtonStyle.Secondary),
 new ButtonBuilder().setCustomId("setup_panel_vouch").setLabel(" Vouch").setStyle(ButtonStyle.Secondary),
@@ -4502,9 +4542,9 @@ new RoleSelectMenuBuilder()
 ),
 ],
 flags: MessageFlags.Ephemeral,
-
 });
 }
+
 function showSetupWelcome(interaction) {
 const cfg=getGuildConfig(interaction.guildId);
 const fn=interaction.replied||interaction.deferred?"followUp":"reply";
@@ -4547,10 +4587,10 @@ components:[
 new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId("setupchannels_vouch").setPlaceholder(" Vouch channel").addChannelTypes(ChannelType.GuildText)),
 new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId("setupchannels_partner").setPlaceholder(" Partner channel").addChannelTypes(ChannelType.GuildText)),
 new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId("setupchannels_ticketlogs").setPlaceholder(" Ticket logs channel").addChannelTypes(ChannelType.GuildText)),
-
 new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId("setupchannels_announce").setPlaceholder(" Announcements channel").addChannelTypes(ChannelType.GuildText)),
 new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId("setupchannels_raidwarnings").setPlaceholder(" Raid warnings channel").addChannelTypes(ChannelType.GuildText)),
 ],
+
 flags:MessageFlags.Ephemeral,
 });
 }
@@ -4593,9 +4633,9 @@ new ButtonBuilder().setCustomId("reset_prompt_founder").setLabel(" Reset").setSt
 ],
 flags:MessageFlags.Ephemeral,
 });
-
 }
 function showSetupAntiRaid(interaction) {
+
 const cfg=getGuildConfig(interaction.guildId); const ar=cfg.antiRaid??{};
 const fn=interaction.replied||interaction.deferred?"followUp":"reply";
 return interaction[fn]({
@@ -4637,10 +4677,10 @@ return interaction[fn]({embeds:[new EmbedBuilder().setColor(0x2ecc71).setTitle("
 // ANTI-RAID SYSTEM
 // ============================================================
 function getAntiRaidTracker(guildId) {
-
 if (!antiRaidTracker.has(guildId)) antiRaidTracker.set(guildId,{channelDeletes:[],roleDeletes:[],bans:[],kicks:[],pings:[]});
 return antiRaidTracker.get(guildId);
 }
+
 function recordAntiRaidAction(guildId, type) {
 const t=getAntiRaidTracker(guildId), now=Date.now();
 t[type]=(t[type]??[]).filter(ts=>now-ts<60000);
@@ -4683,10 +4723,10 @@ if (cfg.raidWarningsChannelId) {
 try {
 const ch=await client.channels.fetch(cfg.raidWarningsChannelId).catch(()=>null);
 if (ch) await ch.send({embeds:[new EmbedBuilder().setColor(0xe74c3c).setTitle(" Anti-Raid Alert")
-
 .setDescription("<@"+userId+"> exceeded the **"+actionType+"** limit!")
 .addFields(
 {name:" User",value:"<@"+userId+">",inline:true},
+
 {name:" Action",value:actionType,inline:true},
 {name:" Count / Limit",value:count+" / "+limit+" per minute",inline:true},
 {name:" Time",value:"<t:"+Math.floor(Date.now()/1000)+":F>",inline:true},
@@ -4728,10 +4768,10 @@ try {
 const logs = await ban.guild.fetchAuditLogs({ type: 22, limit: 1 }).catch(() => null);
 const e = logs?.entries.first();
 if (!e || Date.now() - e.createdTimestamp > 10000) return;
-
 if (e.executor?.bot) return;
 const count = recordAntiRaidAction(ban.guild.id, "bans");
 await checkAntiRaid(ban.guild, e.executor.id, "Bans", count, cfg.antiRaid.banLimit);
+
 } catch(err) { console.error("Anti-raid banAdd error:", err.message); }
 });
 // ============================================================
@@ -4772,10 +4812,10 @@ if (isNaN(amount)||amount<=0) return interaction.reply({embeds:[errorEmbed("Inva
 await interaction.deferReply();
 const [sR,rR]=await Promise.all([donutAPI("/v1/stats/"+encodeURIComponent(senderIGN)),donutAPI("/v1/stats/"+encodeURIComponent(receiverIGN))]);
 if (!sR.ok) return interaction.editReply({embeds:[errorEmbed("Could not find sender: "+senderIGN)]});
-
 if (!rR.ok) return interaction.editReply({embeds:[errorEmbed("Could not find receiver: "+receiverIGN)]});
 const sStart=parseFloat(sR.data.result?.money??sR.data.money??0)||0;
 const rStart=parseFloat(rR.data.result?.money??rR.data.money??0)||0;
+
 const tolerance=amount*0.02;
 const expiresAt=Date.now()+3*60*1000;
 await interaction.editReply({embeds:[new EmbedBuilder().setColor(0xf1c40f).setTitle(" Payment Tracking Active")
@@ -4816,10 +4856,10 @@ await interaction.editReply({embeds:[new EmbedBuilder().setColor(0x2ecc71).setTi
 async function handleWeeklyPayment(interaction) {
 if (!interaction.guild) return interaction.reply({ embeds: [errorEmbed("Server only.")], flags: MessageFlags.Ephemeral });
 const guildId = interaction.guildId;
-
 // Clear option
 const clearOpt = interaction.options.getString("clear");
 if (clearOpt === "clear") {
+
 await dbClearWeeklyPayments(guildId);
 return interaction.reply({
 embeds: [new EmbedBuilder().setColor(0xe74c3c).setTitle(" Weekly Payments Cleared")
@@ -4857,9 +4897,9 @@ embeds: [errorEmbed("No weekly payment records found. Use `/weeklypayment` to ad
 flags: MessageFlags.Ephemeral,
 });
 }
-
 const completed = [];
 const notCompleted = [];
+
 for (const [userId, data] of gMap.entries()) {
 if (data.status === "completed") {
 const amt = data.amount ? ` — ${data.amount}` : "";
@@ -4897,10 +4937,10 @@ embeds: [new EmbedBuilder()
 "**To purchase premium, DM <@1012989279049367592>.**\n\n" +
 "Once purchased, you'll receive a one-time activation key.\n" +
 "Use `/premium key:<yourkey>` to activate it for this server.\n\n" +
-
 "**Premium features include:**\n" +
 " Partner Tracking\n" +
 " Payment Tracking\n" +
+
 " Staff Analytics\n" +
 " Weekly Payment Board\n" +
 " Ticket Close & Rename Tracking (Coming Soon)"
@@ -4941,9 +4981,9 @@ embeds: [new EmbedBuilder()
 .setTimestamp()],
 });
 }
-
 // ============================================================
 // PARTNER TRACKING SYSTEM
+
 // ============================================================
 function getPeriodMs(period) {
 if (period==="day") return 24*60*60*1000;
@@ -4984,10 +5024,10 @@ const lines=sorted.slice(0,15).map(([uid,cnt],i)=>(medals[i]??("**"+(i+1)+".**")
 const footer=(hitLimit?" Could not load all messages — partial data only • ":"")+(mode==="fromnow"?"Tracking new partners only • ":" ")+"Updates every 5 mins";
 return new EmbedBuilder().setColor(0x2ecc71).setTitle(" Partners — "+label).setDescription(lines.join("\n")).setFooter({text:footer}).setTimestamp();
 }
-
 async function handlePartnerTrackingMode(interaction, mode, period) {
 const cfg=getGuildConfig(interaction.guildId);
 if (!cfg.partnerChannelId) return interaction.update({embeds:[errorEmbed("Partner channel not set. Use `/setupchannels`.")],components:[]});
+
 const channel=await client.channels.fetch(cfg.partnerChannelId).catch(()=>null);
 if (!channel) return interaction.update({embeds:[errorEmbed("Could not fetch the partner channel.")],components:[]});
 await interaction.update({embeds:[new EmbedBuilder().setColor(0x5865f2).setTitle(" Loading partners...").setDescription("Fetching messages, please wait...").setTimestamp()],components:[]});
@@ -5029,10 +5069,10 @@ const entries=[];
 for (const [key,data] of giveawayValues.entries()) {
 if (!key.startsWith(prefix)) continue;
 const userId=key.slice(prefix.length);
-
 const total=period==="all"?data.totalValue:(data.history??[]).filter(h=>h.timestamp>=cutoff).reduce((s,h)=>s+h.value,0);
 if (total>0) entries.push({userId,total});
 }
+
 if (!entries.length) {
 // Fallback to host counts
 const countEntries=[];
@@ -5070,10 +5110,10 @@ const results = [];
 const threeStrikeUsers = [];
 for (const uid of userIds) {
 const key = interaction.guildId + ":" + uid;
-
 const existing = strikeStore.get(key) ?? [];
 const newStrike = { reason, by: interaction.user.id, timestamp: Date.now() };
 existing.push(newStrike);
+
 strikeStore.set(key, existing);
 dbSaveStrike(interaction.guildId, uid, existing);
 const count = existing.length;
@@ -5112,8 +5152,8 @@ roleList = staffRoles.size ? staffRoles.sort((a,b) => b.position - a.position).m
 }
 }
 } catch {}
-
 const strikeHistory = strikes.map((s,i) => `**Strike ${i+1}:** ${s.reason} — by <@${s.by}> (<t:${Math.floor(s.timestamp/1000)}:d>)`).join("\n");
+
 const alertEmbed = new EmbedBuilder()
 .setColor(0xff0000)
 .setTitle(" User Reached 3 Strikes")
@@ -5152,10 +5192,10 @@ flags: MessageFlags.Ephemeral,
 }
 async function handleClearStrikes(interaction) {
 const target = interaction.options.getUser("user");
-
 const key = interaction.guildId + ":" + target.id;
 strikeStore.set(key, []);
 dbSaveStrike(interaction.guildId, target.id, []);
+
 return interaction.reply({
 embeds: [new EmbedBuilder().setColor(0x2ecc71).setTitle(" Strikes Cleared").setDescription("All strikes for <@" + target.id + "> have been cleared.").setTimestamp()],
 flags: MessageFlags.Ephemeral,
@@ -5194,10 +5234,10 @@ embeds: [new EmbedBuilder()
 .setTitle(" Staff Demotion — 3 Strikes")
 .setDescription(`<@${userId}> was demoted by <@${interaction.user.id}> for reaching 3/3 strikes.`)
 .addFields(
-
 { name: " User", value: `<@${userId}>`, inline: true },
 { name: " Demoted By", value: `<@${interaction.user.id}>`, inline: true },
 { name: " Roles Removed", value: removedRoles.length ? removedRoles.join(", ") : "None", inline: false },
+
 )
 .setTimestamp()],
 }).catch(() => {});

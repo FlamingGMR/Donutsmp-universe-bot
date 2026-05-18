@@ -191,6 +191,17 @@ await db.query(`CREATE TABLE IF NOT EXISTS giveaway_values (guild_id TEXT NOT NU
 await db.query(`CREATE TABLE IF NOT EXISTS active_giveaways (message_id TEXT PRIMARY KEY, channel_id TEXT NOT NULL, guild_id TEXT NOT NULL, data JSONB NOT NULL DEFAULT '{}')`);
 await db.query(`CREATE TABLE IF NOT EXISTS strikes (guild_id TEXT NOT NULL, user_id TEXT NOT NULL, data JSONB NOT NULL DEFAULT '[]', PRIMARY KEY (guild_id, user_id))`);
 await db.query(`CREATE TABLE IF NOT EXISTS live_leaderboards (guild_id TEXT PRIMARY KEY, data JSONB NOT NULL DEFAULT '{}')`);
+await db.query(`
+CREATE TABLE IF NOT EXISTS bot_announcements (
+id SERIAL PRIMARY KEY,
+title TEXT,
+message TEXT NOT NULL,
+sent_by TEXT,
+created_at TIMESTAMPTZ DEFAULT NOW(),
+sent BOOLEAN DEFAULT FALSE,
+sent_at TIMESTAMPTZ
+)
+`);
 console.log(" Database tables ready");
 }
 // ── Guild Config DB helpers ───────────────────────────────────
@@ -201,6 +212,7 @@ await db.query(
 `INSERT INTO guild_configs (guild_id, data) VALUES ($1, $2)
 ON CONFLICT (guild_id) DO UPDATE SET data = $2`,
 [guildId, JSON.stringify(cfg)]
+
 ).catch(e => console.error("DB save guild config error:", e));
 }
 async function dbLoadAllGuildConfigs() {
@@ -211,7 +223,6 @@ welcomeEnabled: true, welcomeChannelId: null, vouchChannelId: null,
 partnerChannelId: null, staffAppChannelId: null, pmAppChannelId: null,
 staffRoleId: null, helperRoleId: null, pmRoleId: null, ticketStaffRoleId: null,
 spawnerBuyPrice: 4400000, spawnerSellPrice: 5200000, ticketTypes: null, appTypes: null,
-
 };
 guildConfigs.set(row.guild_id, { ...defaults, ...row.data });
 }
@@ -244,6 +255,7 @@ ON CONFLICT (user_id) DO UPDATE SET data = $2`,
 }
 async function dbLoadAllScamVouches() {
 const res = await db.query("SELECT user_id, data FROM scam_vouches").catch(() => ({ rows: [] }));
+
 for (const row of res.rows) {
 scamVouchStore.set(row.user_id, row.data);
 }
@@ -254,7 +266,6 @@ const key = guildId + ":" + userId;
 const data = warnStore.get(key) ?? [];
 await db.query(
 `INSERT INTO warn_store (guild_id, user_id, data) VALUES ($1, $2, $3)
-
 ON CONFLICT (guild_id, user_id) DO UPDATE SET data = $3`,
 [guildId, userId, JSON.stringify(data)]
 ).catch(e => console.error("DB save warn error:", e));
@@ -287,6 +298,7 @@ const data = weeklyPaymentStore.get(guildId).get(userId) ?? { status: 'not_compl
 await db.query(
 `INSERT INTO weekly_payment_store (guild_id, user_id, data) VALUES ($1, $2, $3)
 ON CONFLICT (guild_id, user_id) DO UPDATE SET data = $3`,
+
 [guildId, userId, JSON.stringify(data)]
 ).catch(e => console.error("DB save weekly_payment error:", e));
 }
@@ -296,7 +308,6 @@ await db.query("DELETE FROM weekly_payment_store WHERE guild_id = $1", [guildId]
 .catch(e => console.error("DB clear weekly_payment error:", e));
 }
 async function dbLoadAllWeeklyPayments() {
-
 const res = await db.query("SELECT guild_id, user_id, data FROM weekly_payment_store").catch(() => ({ rows: [] }));
 for (const row of res.rows) {
 if (!weeklyPaymentStore.has(row.guild_id)) weeklyPaymentStore.set(row.guild_id, new Map());
@@ -329,49 +340,7 @@ ON CONFLICT (key) DO UPDATE SET text = $2`,
 ).catch(e => console.error("DB save pricing error:", e));
 }
 async function dbLoadAllPricing() {
-const res = await db.query("SELECT key, text FROM pricing_messages").catch(() => ({ rows: [] }));
-for (const row of res.rows) {
-pricingMessages.set(row.key, row.text);
-}
-}
-// ── Invite tracker DB helpers ────────────────────────────────
-async function dbSaveInviteTracker(guildId) {
-const data = inviteTracker.get(guildId) ?? { joins: [], leaves: [] };
-await db.query(
-`INSERT INTO invite_tracker (guild_id, data) VALUES ($1, $2)
 
-ON CONFLICT (guild_id) DO UPDATE SET data = $2`,
-[guildId, JSON.stringify(data)]
-).catch(e => console.error("DB save invite tracker error:", e));
-}
-async function dbLoadAllInviteTracker() {
-const res = await db.query("SELECT guild_id, data FROM invite_tracker").catch(() => ({ rows: [] }));
-for (const row of res.rows) {
-inviteTracker.set(row.guild_id, row.data);
-}
-}
-// ── DB loaded flag ───────────────────────────────────────────
-// dbLoaded is accessed via global._bot._dbLoaded so handlers.js
-// sees mutations. Use a getter/setter on the local name too.
-let _dbLoadedVal = false;
-Object.defineProperty(global, '_dbLoadedVal', { get() { return _dbLoadedVal; }, set(v) { _dbLoadedVal = v; if (global._bot) global._bot._dbLoaded = v; }, configurable: true });
-// Alias used in this file
-const getDbLoaded = () => _dbLoadedVal;
-
-async function dbSavePartnerSession(guildId) {
-const d = partnerSessions.get(guildId) ?? {};
-await db.query(`INSERT INTO partner_sessions (guild_id, data) VALUES ($1,$2) ON CONFLICT (guild_id) DO UPDATE SET data=$2`,[guildId,JSON.stringify(d)]).catch(e=>console.error("DB partner_session:",e.message));
-}
-async function dbSaveGiveawayValue(guildId, userId) {
-const key=guildId+":"+userId, d=giveawayValues.get(key)??{totalValue:0,count:0,history:[]};
-await db.query(`INSERT INTO giveaway_values (guild_id, user_id, data) VALUES ($1,$2,$3) ON CONFLICT (guild_id, user_id) DO UPDATE SET data=$3`,[guildId,userId,JSON.stringify(d)]).catch(e=>console.error("DB giveaway_values:",e.message));
-}
-async function dbSaveActiveGiveaway(messageId, channelId, guildId, data) {
-await db.query(`INSERT INTO active_giveaways (message_id, channel_id, guild_id, data) VALUES ($1,$2,$3,$4) ON CONFLICT (message_id) DO UPDATE SET data=$4`,[messageId,channelId,guildId,JSON.stringify(data)]).catch(e=>console.error("DB active_giveaway:",e.message));
-}
-async function dbDeleteActiveGiveaway(messageId) {
-await db.query(`DELETE FROM active_giveaways WHERE message_id=$1`,[messageId]).catch(()=>{});
-}
 async function dbSaveStrike(guildId, userId, data) {
 await db.query(`INSERT INTO strikes (guild_id, user_id, data) VALUES ($1,$2,$3) ON CONFLICT (guild_id, user_id) DO UPDATE SET data=$3`,[guildId,userId,JSON.stringify(data)]).catch(e=>console.error("DB strike:",e.message));
 }
@@ -382,7 +351,6 @@ await db.query(
 `INSERT INTO live_leaderboards (guild_id, data) VALUES ($1,$2) ON CONFLICT (guild_id) DO UPDATE SET data=$2`,
 [guildId, JSON.stringify(data)]
 ).catch(e => console.error("DB live_leaderboards save:", e.message));
-
 }
 async function dbLoadLiveLeaderboards() {
 const res = await db.query("SELECT guild_id, data FROM live_leaderboards").catch(() => ({ rows: [] }));
@@ -418,6 +386,7 @@ await db.query(
 }
 async function dbLogTicketStat(guildId, staffId, action, channelId, openedAt) {
 const secsElapsed = openedAt ? Math.floor((Date.now() - openedAt) / 1000) : null;
+
 await db.query(
 `INSERT INTO ticket_stats (guild_id, staff_id, action, ticket_channel_id, opened_at, seconds_elapsed)
 VALUES ($1,$2,$3,$4,$5,$6)`,
@@ -428,7 +397,6 @@ VALUES ($1,$2,$3,$4,$5,$6)`,
 async function loadAllFromDB() {
 await Promise.all([
 dbLoadAllGuildConfigs(),
-
 dbLoadAllVouches(),
 dbLoadAllScamVouches(),
 dbLoadAllWarns(),
@@ -464,6 +432,7 @@ const ag = await db.query("SELECT message_id, channel_id, guild_id, data FROM ac
 let gwRestored = 0;
 for (const r of ag.rows) {
 const data = r.data;
+
 activeGiveaways.set(r.message_id, data);
 const remaining = data.endsAt - Date.now();
 const delay = remaining > 0 ? remaining : 5000; // if expired, end after 5s
@@ -475,7 +444,6 @@ if (!ch) { dbDeleteActiveGiveaway(r.message_id); return; }
 if (data.isSplitOrSteal) await endSplitOrStealGiveaway(r.message_id, ch, data).catch(()=>{});
 else await endGiveaway(r.message_id, ch).catch(()=>{});
 } catch(e) { console.error("Giveaway restore error:", e.message); }
-
 }, delay);
 gwRestored++;
 }
@@ -511,6 +479,7 @@ pmRoleId: process.env.PM_ROLE_ID ?? null,
 ticketStaffRoleId: process.env.TICKET_STAFF_ROLE_ID ?? null,
 spawnerBuyPrice: 4400000,
 spawnerSellPrice: 5200000,
+
 ticketTypes: null, // null = use defaults
 appTypes: null, // null = use defaults
 });
@@ -521,7 +490,6 @@ return guildConfigs.get(guildId);
 const TICKET_CATEGORIES = {
 support: "Support Tickets",
 giveaway: "Giveaway Tickets",
-
 partnership: "Partnership Ticket",
 spawner: "Spawner Staff Ticket",
 report: "Member/Staff Report",
@@ -555,6 +523,7 @@ const num = parseFloat(match[1]);
 const suffix = match[3];
 return suffix ? num * multipliers[suffix] : num;
 }
+
 // ── Helper: format large numbers back to readable string ──────
 function formatNumber(num) {
 if (num >= 1_000_000_000) return (num / 1_000_000_000).toFixed(2).replace(/\.00$/, "") + "b";
@@ -564,7 +533,6 @@ return num.toString();
 }
 // ── Helper: compact stat number (1500 -> 1.5k) ─────────────
 function compactStat(n) {
-
 const num = parseFloat(n) || 0;
 if (num >= 1_000_000_000) return (num / 1_000_000_000).toFixed(1).replace(/\.0$/, "") + "b";
 if (num >= 1_000_000) return (num / 1_000_000).toFixed(1).replace(/\.0$/, "") + "m";
@@ -595,6 +563,7 @@ const rawCommands = [
 new SlashCommandBuilder()
 .setName("warn")
 .setDescription("Warn a member")
+
 .addUserOption(o => o.setName("user").setDescription("Member to warn").setRequired(true))
 .addStringOption(o => o.setName("reason").setDescription("Reason for warning").setRequired(true))
 .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
@@ -604,7 +573,6 @@ new SlashCommandBuilder()
 .addUserOption(o => o.setName("user").setDescription("Member to check").setRequired(true))
 .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
 new SlashCommandBuilder()
-
 .setName("clearwarnings")
 .setDescription("Clear all warnings for a member")
 .addUserOption(o => o.setName("user").setDescription("Member to clear").setRequired(true))
@@ -634,6 +602,7 @@ new SlashCommandBuilder()
 new SlashCommandBuilder()
 .setName("timeout")
 .setDescription("Timeout a member")
+
 .addUserOption(o => o.setName("user").setDescription("Member to timeout").setRequired(true))
 .addStringOption(o =>
 o.setName("duration")
@@ -644,7 +613,6 @@ o.setName("duration")
 .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
 new SlashCommandBuilder()
 .setName("untimeout")
-
 .setDescription("Remove timeout from a member")
 .addUserOption(o => o.setName("user").setDescription("Member to untimeout").setRequired(true))
 .addStringOption(o => o.setName("reason").setDescription("Reason").setRequired(false))
@@ -685,7 +653,6 @@ o.setName("amount")
 .setRequired(true)
 )
 .addStringOption(o =>
-
 o.setName("type")
 .setDescription("Are you buying or selling?")
 .setRequired(true)
@@ -718,6 +685,7 @@ new SlashCommandBuilder().setName("setup").setDescription("Open the bot setup pa
 new SlashCommandBuilder().setName("wait").setDescription("Send the wait message"),
 // ── GIVEAWAY ─────────────────────────────────────────────
 new SlashCommandBuilder()
+
 .setName("giveaway").setDescription("Start a giveaway")
 .addStringOption(o=>o.setName("prize").setDescription("Prize (e.g. Elytra, 10m)").setRequired(true))
 .addStringOption(o=>o.setName("duration").setDescription("Duration (e.g. 1h, 30m, 2d)").setRequired(true))
@@ -729,7 +697,6 @@ new SlashCommandBuilder()
 .setName("giveawaydork").setDescription("Start a Dork giveaway — winner can double the prize")
 .addStringOption(o=>o.setName("prize").setDescription("Starting prize (e.g. 5m)").setRequired(true))
 .addStringOption(o=>o.setName("duration").setDescription("Duration (e.g. 1h, 30m)").setRequired(true))
-
 .addStringOption(o=>o.setName("maxprize").setDescription("Max prize cap (e.g. 10m)").setRequired(true))
 .addStringOption(o=>o.setName("description").setDescription("Extra description").setRequired(false))
 .setDefaultMemberPermissions(PermissionFlagsBits.ManageEvents),
@@ -763,6 +730,7 @@ o.setName("username")
 )
 .setDMPermission(true),
 // ── DONUT SMP: LOOKUP ─────────────────────────────────────
+
 new SlashCommandBuilder()
 .setName("lookup")
 .setDescription("Look up a DonutSMP player's rank and location")
@@ -772,7 +740,6 @@ o.setName("username")
 .setRequired(true)
 )
 .setDMPermission(true),
-
 // ── DONUT SMP: AUCTION HOUSE ──────────────────────────────
 new SlashCommandBuilder()
 .setName("ah")
@@ -806,6 +773,7 @@ o.setName("page")
 .setMaxValue(10)
 )
 .setDMPermission(true),
+
 // ── DONUT SMP: LEADERBOARD ───────────────────────────────
 new SlashCommandBuilder()
 .setName("leaderboard")
@@ -815,7 +783,6 @@ o.setName("type")
 .setDescription("Which leaderboard to view")
 .setRequired(true)
 .addChoices(
-
 { name: " Money", value: "money" },
 { name: " Kills", value: "kills" },
 { name: " Deaths", value: "deaths" },
@@ -846,6 +813,7 @@ new SlashCommandBuilder()
 .setDescription("Post the ticket panel in this channel")
 .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
 // ── APPLICATION PANEL ────────────────────────────────────
+
 new SlashCommandBuilder()
 .setName("applicationpanelsend")
 .setDescription("Post the staff application panel in this channel")
@@ -855,7 +823,6 @@ new SlashCommandBuilder()
 .setName("vouch")
 .setDescription("Vouch for a user in this server")
 .addUserOption(o =>
-
 o.setName("user")
 .setDescription("The user you are vouching for")
 .setRequired(true)
@@ -888,6 +855,7 @@ o.setName("action")
 )
 )
 .addStringOption(o =>
+
 o.setName("reason")
 .setDescription("Reason for locking")
 .setRequired(false)
@@ -897,7 +865,6 @@ o.setName("reason")
 new SlashCommandBuilder()
 .setName("embedorganized")
 .setDescription("Create a customized embed using a popup form")
-
 .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages),
 // ── PURGE ─────────────────────────────────────────────────
 new SlashCommandBuilder()
@@ -928,6 +895,7 @@ new SlashCommandBuilder()
 .addUserOption(o =>
 o.setName("user")
 .setDescription("User to add")
+
 .setRequired(true)
 )
 .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
@@ -937,7 +905,6 @@ new SlashCommandBuilder()
 .setDescription("Remove a user from the current ticket")
 .addUserOption(o =>
 o.setName("user")
-
 .setDescription("User to remove")
 .setRequired(true)
 )
@@ -965,6 +932,7 @@ new SlashCommandBuilder()
 
 new SlashCommandBuilder()
 .setName("features")
+
 .setDescription("Show all bot features")
 .setDMPermission(true),
 new SlashCommandBuilder()
@@ -973,7 +941,6 @@ new SlashCommandBuilder()
 .setDMPermission(true),
 // ── SLOWMODE ──────────────────────────────────────────────
 new SlashCommandBuilder()
-
 .setName("slowmode")
 .setDescription("Set slowmode on a channel")
 .addStringOption(o =>
@@ -1001,6 +968,7 @@ new SlashCommandBuilder()
 .addUserOption(o => o.setName("user").setDescription("User to check (defaults to yourself)").setRequired(false)),
 // ── ROLE INFO ─────────────────────────────────────────────
 new SlashCommandBuilder()
+
 .setName("roleinfo")
 .setDescription("View info about a role")
 .addRoleOption(o => o.setName("role").setDescription("Role to check").setRequired(true)),
@@ -1010,7 +978,6 @@ new SlashCommandBuilder()
 .setDescription("View join/leave stats for this server")
 .addStringOption(o =>
 o.setName("period")
-
 .setDescription("Time period to check")
 .setRequired(false)
 .addChoices(
@@ -1042,6 +1009,7 @@ new SlashCommandBuilder()
 .setName("lockdown")
 .setDescription("Lock all channels in the server (Founder only)"),
 new SlashCommandBuilder()
+
 .setName("unlockdown")
 .setDescription("Unlock all channels in the server (Founder only)"),
 // ── SETUP WELCOME ─────────────────────────────────────────
@@ -1077,6 +1045,7 @@ o.setName("period")
 { name: "All Time", value: "all" }
 )
 ),
+
 // ── GIVEAWAY TRACKING ─────────────────────────────────────
 new SlashCommandBuilder()
 .setName("giveawaytracking")
@@ -1087,7 +1056,6 @@ o.setName("period")
 .setRequired(false)
 .addChoices(
 { name: "Last 7 Days", value: "week" },
-
 { name: "Last Month", value: "month" },
 { name: "All Time", value: "all" }
 )
@@ -1119,6 +1087,7 @@ o.setName("status")
 .setDescription("Mark as completed or not completed")
 .setRequired(true)
 .addChoices(
+
 { name: " Completed", value: "completed" },
 { name: " Not Completed", value: "not_completed" }
 )
@@ -1130,7 +1099,6 @@ o.setName("amount")
 )
 .addStringOption(o =>
 o.setName("clear")
-
 .setDescription("Clear all weekly payment records for this server")
 .setRequired(false)
 .addChoices({ name: "Clear all records", value: "clear" })
@@ -1160,6 +1128,7 @@ new SlashCommandBuilder()
 .addStringOption(o => o.setName("message").setDescription("The announcement message").setRequired(true))
 .addStringOption(o => o.setName("title").setDescription("Optional title").setRequired(false))
 .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+
 // ── MESSAGE (plain text sender) ───────────────────────────
 new SlashCommandBuilder()
 .setName("message")
@@ -1169,7 +1138,6 @@ new SlashCommandBuilder()
 new SlashCommandBuilder()
 .setName("weeklypaymentpost")
 .setDescription("Post the weekly payment list publicly")
-
 .setDefaultMemberPermissions(PermissionFlagsBits.ManageEvents),
 
 new SlashCommandBuilder()
@@ -1201,6 +1169,7 @@ try { commands = rawCommands.map(cmd=>cmd.toJSON()); console.log(" Built", comma
 catch(err) { console.error(" FATAL: Failed to build command definitions:", err.message); commands = []; }
 
 // ============================================================
+
 // REGISTER SLASH COMMANDS VIA REST
 // ============================================================
 async function registerCommands() {
@@ -1211,7 +1180,6 @@ try { for (const g of client.guilds.cache.values()) await rest.put(Routes.applic
 console.log("Registering slash commands...");
 try {
 await rest.put(Routes.applicationCommands(clientId),{body:[]});
-
 console.log("Cleared global commands");
 if (guildId) {
 await rest.put(Routes.applicationGuildCommands(clientId,guildId),{body:commands});
@@ -1245,6 +1213,7 @@ console.log("Commands registered instantly to",guild.name);
 // Accepts formats like 30s, 10m, 2h, 7d
 function parseDuration(str) {
 const match = String(str).trim().toLowerCase().match(/^(\d+(\.\d+)?)(s|m|h|d)$/);
+
 if (!match) return NaN;
 const value = parseFloat(match[1]);
 const unit = match[3];
@@ -1255,7 +1224,6 @@ return value * map[unit];
 // ── Owner guard (absolute — Discord ID only) ─────────────────
 const BOT_OWNER_ID = "1012989279049367592";
 function isOwner(userId) { return userId === BOT_OWNER_ID; }
-
 // ── Generate random 12-char activation key ────────────────────
 function generateActivationKey() {
 const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -1281,47 +1249,13 @@ return interaction.reply({ embeds: [errorEmbed("You need the **" + (names[perm] 
 }
 return null; // null = caller has permission, proceed
 }
-function buildGiveawayEmbed(data) {
-const endTimestamp = Math.floor(data.endsAt / 1000);
-let desc = "";
-if (data.description) desc += `${data.description}\n`;
-desc += `\n Ending: <t:${endTimestamp}:R>`;
-desc += `\n Host: <@${data.hostId}>`;
-desc += `\n Entries: **${data.entries.length}**`;
-const embed = new EmbedBuilder()
-.setColor(0xf1c40f)
-.setTitle(" " + (typeof data.prize === "number" ? formatNumber(data.prize) : data.prize))
-.setDescription(desc)
-.setTimestamp(data.endsAt);
-if (data.maxPrize !== null && data.maxPrize !== undefined) {
-embed.setFooter({ text: `Max prize cap: ${formatNumber(data.maxPrize)}` });
-}
-return embed;
-
-}
-// ── Helper: build dork buttons ────────────────────────────────
-function buildDorkRow(currentPrize, maxPrize, dorkId, forceDisableDouble = false) {
-const doubled = currentPrize * 2;
-const canDouble = !forceDisableDouble && doubled <= maxPrize && currentPrize > 0;
-const keepBtn = new ButtonBuilder()
-.setCustomId(`dork_keep_${dorkId}`)
-.setLabel(" Keep")
-.setStyle(ButtonStyle.Success);
-const doubleLabel = forceDisableDouble
-? " Double (N/A)"
-: ` Double (→ ${formatNumber(doubled)})`;
-const doubleBtn = new ButtonBuilder()
-.setCustomId(`dork_double_${dorkId}`)
-.setLabel(doubleLabel)
-.setStyle(ButtonStyle.Danger)
-.setDisabled(!canDouble);
-return new ActionRowBuilder().addComponents(keepBtn, doubleBtn);
-}
+// buildGiveawayEmbed and buildDorkRow moved to handlers.js
 
 // ── Expose shared state globally so handlers.js can access ───
 // This is the correct pattern for splitting a single-file bot:
 // everything defined here is attached to global so the second
 // file sees it without needing module.exports of 100+ items.
+
 global._bot = {
 client, db,
 // Discord.js constructors
@@ -1339,7 +1273,6 @@ activeGiveaways, activeDorks, splitOrStealSessions,
 premiumGuilds, activationKeys, ticketResponseLogged,
 activeApplications, paymentSessions, antiRaidTracker, antiRaidPunished,
 // DB functions
-
 initDB, loadAllFromDB,
 getGuildConfig, dbSaveGuildConfig, dbSaveVouch, dbSaveScamVouch,
 dbSaveWarn, dbSavePartnerLinks, dbSaveWeeklyPayment,
@@ -1358,5 +1291,161 @@ require("./handlers");
 // ── Error handling ────────────────────────────────────────────
 process.on("unhandledRejection", err => console.error(" Unhandled rejection:", err));
 process.on("uncaughtException", err => console.error(" Uncaught exception:", err));
+// ── Bot HTTP API Server (for website integration) ─────────────
+// Allows the website to: trigger announcements, grant/revoke premium,
+// read guild configs, and get stats — all authenticated via BOT_API_SECRET
+(async () => {
+try {
+const http = require("http");
+const BOT_SECRET = process.env.BOT_API_SECRET;
+const server = http.createServer(async (req, res) => {
+
+// Auth check
+const auth = req.headers["authorization"] ?? "";
+if (!BOT_SECRET || auth !== `Bearer ${BOT_SECRET}`) {
+res.writeHead(401, { "Content-Type": "application/json" });
+return res.end(JSON.stringify({ ok: false, error: "Unauthorized" }));
+}
+// Parse body
+let body = "";
+for await (const chunk of req) body += chunk;
+let data = {};
+try { data = body ? JSON.parse(body) : {}; } catch { /**/ }
+const url = req.url?.split("?")[0];
+res.setHeader("Content-Type", "application/json");
+// ── POST /announce ──────────────────────────────────────
+if (req.method === "POST" && url === "/announce") {
+const { message, title } = data;
+if (!message) { res.writeHead(400); return res.end(JSON.stringify({ ok: false, error: "message required" })); }
+let sent = 0, failed = 0;
+for (const [, guild] of client.guilds.cache) {
+const cfg = getGuildConfig(guild.id);
+const channelId = cfg.announceChannelId ?? cfg.welcomeChannelId;
+if (!channelId) { failed++; continue; }
+const ch = guild.channels.cache.get(channelId);
+if (!ch?.isTextBased()) { failed++; continue; }
+try {
+await ch.send({ embeds: [new EmbedBuilder().setColor(0xf1c40f).setTitle(title || " Announcement").setDescription(message).setFooter({ text: "DonutSMP Universe Bot" }).setTimestamp()] });
+sent++;
+} catch { failed++; }
+}
+return res.end(JSON.stringify({ ok: true, sent, failed }));
+}
+// ── POST /premium/grant ─────────────────────────────────
+if (req.method === "POST" && url === "/premium/grant") {
+const { guildId } = data;
+if (!guildId) { res.writeHead(400); return res.end(JSON.stringify({ ok: false, error: "guildId required" })); }
+premiumGuilds.set(guildId, { activatedBy: "website", activatedAt: Date.now() });
+await dbSavePremiumGuild(guildId, "website");
+return res.end(JSON.stringify({ ok: true }));
+}
+// ── POST /premium/revoke ────────────────────────────────
+if (req.method === "POST" && url === "/premium/revoke") {
+const { guildId } = data;
+
+if (!guildId) { res.writeHead(400); return res.end(JSON.stringify({ ok: false, error: "guildId required" })); }
+await dbRemovePremiumGuild(guildId);
+return res.end(JSON.stringify({ ok: true }));
+}
+// ── GET /guilds ─────────────────────────────────────────
+if (req.method === "GET" && url === "/guilds") {
+const guilds = [...client.guilds.cache.values()].map(g => ({
+id: g.id, name: g.name, icon: g.icon,
+memberCount: g.memberCount,
+premium: premiumGuilds.has(g.id),
+}));
+return res.end(JSON.stringify({ ok: true, guilds }));
+}
+// ── GET /guild/config ───────────────────────────────────
+if (req.method === "GET" && url === "/guild/config") {
+const guildId = new URL("http://x" + req.url).searchParams.get("guildId");
+if (!guildId) { res.writeHead(400); return res.end(JSON.stringify({ ok: false, error: "guildId required" })); }
+const cfg = getGuildConfig(guildId);
+return res.end(JSON.stringify({ ok: true, config: cfg }));
+}
+// ── POST /guild/config ──────────────────────────────────
+if (req.method === "POST" && url === "/guild/config") {
+const { guildId, config } = data;
+if (!guildId || !config) { res.writeHead(400); return res.end(JSON.stringify({ ok: false, error: "guildId and config required" })); }
+const existing = getGuildConfig(guildId);
+Object.assign(existing, config);
+guildConfigs.set(guildId, existing);
+await dbSaveGuildConfig(guildId);
+return res.end(JSON.stringify({ ok: true }));
+}
+// ── GET /stats ──────────────────────────────────────────
+if (req.method === "GET" && url === "/stats") {
+const guildId = new URL("http://x" + req.url).searchParams.get("guildId");
+let stats = { totalGuilds: client.guilds.cache.size, premiumGuilds: premiumGuilds.size };
+if (guildId) {
+// Per-guild stats from DB
+const [partnerRes, gwRes] = await Promise.all([
+db.query("SELECT data FROM partner_links WHERE guild_id=$1", [guildId]).catch(() => ({ rows: [] })),
+db.query("SELECT SUM((data->>'count')::int) as total FROM giveaway_host_counts WHERE guild_id=$1", [guildId]).catch(() => ({ rows: [] })),
+]);
+stats.partnerCount = partnerRes.rows[0]?.data?.links?.length ?? 0;
+stats.giveawayCount = partnerRes.rows[0]?.total ?? 0;
+}
+
+return res.end(JSON.stringify({ ok: true, stats }));
+}
+// ── POST /poll-announcements ────────────────────────────
+// Website inserts into bot_announcements table, bot polls here
+if (req.method === "POST" && url === "/poll-announcements") {
+try {
+const pending = await db.query("SELECT * FROM bot_announcements WHERE sent=false ORDER BY created_at ASC LIMIT 10");
+let sent = 0;
+for (const row of pending.rows) {
+let rowSent = 0, rowFailed = 0;
+for (const [, guild] of client.guilds.cache) {
+const cfg = getGuildConfig(guild.id);
+const channelId = cfg.announceChannelId ?? cfg.welcomeChannelId;
+if (!channelId) { rowFailed++; continue; }
+const ch = guild.channels.cache.get(channelId);
+if (!ch?.isTextBased()) { rowFailed++; continue; }
+try {
+await ch.send({ embeds: [new EmbedBuilder().setColor(0xf1c40f).setTitle(row.title || " Announcement").setDescription(row.message).setFooter({ text: "DonutSMP Universe Bot" }).setTimestamp()] });
+rowSent++;
+} catch { rowFailed++; }
+}
+await db.query("UPDATE bot_announcements SET sent=true, sent_at=NOW() WHERE id=$1", [row.id]);
+sent++;
+}
+return res.end(JSON.stringify({ ok: true, processed: sent }));
+} catch (err) {
+res.writeHead(500); return res.end(JSON.stringify({ ok: false, error: err.message }));
+}
+}
+res.writeHead(404);
+res.end(JSON.stringify({ ok: false, error: "Not found" }));
+});
+const BOT_API_PORT = process.env.BOT_API_PORT || 4000;
+server.listen(BOT_API_PORT, "0.0.0.0", () => {
+console.log(` Bot API server running on port ${BOT_API_PORT}`);
+});
+} catch (err) {
+console.error(" Bot API server failed to start:", err.message);
+}
+})();
+// ── Also poll bot_announcements table every 30 seconds ────────
+setInterval(async () => {
+try {
+
+const tableExists = await db.query("SELECT to_regclass('public.bot_announcements')").catch(() => ({ rows: [{ to_regclass: null }] }));
+if (!tableExists.rows[0]?.to_regclass) return;
+const pending = await db.query("SELECT * FROM bot_announcements WHERE sent=false ORDER BY created_at ASC LIMIT 5");
+for (const row of pending.rows) {
+for (const [, guild] of client.guilds.cache) {
+const cfg = getGuildConfig(guild.id);
+const channelId = cfg.announceChannelId ?? cfg.welcomeChannelId;
+if (!channelId) continue;
+const ch = guild.channels.cache.get(channelId);
+if (!ch?.isTextBased()) continue;
+try { await ch.send({ embeds: [new EmbedBuilder().setColor(0xf1c40f).setTitle(row.title || " Announcement").setDescription(row.message).setFooter({ text: "DonutSMP Universe Bot" }).setTimestamp()] }); } catch { /**/ }
+}
+await db.query("UPDATE bot_announcements SET sent=true, sent_at=NOW() WHERE id=$1", [row.id]).catch(() => {});
+}
+} catch { /**/ }
+}, 30000);
 // ── Connect to Discord ────────────────────────────────────────
 client.login(process.env.TOKEN);
