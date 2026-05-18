@@ -341,6 +341,49 @@ ON CONFLICT (key) DO UPDATE SET text = $2`,
 }
 async function dbLoadAllPricing() {
 
+const res = await db.query("SELECT key, text FROM pricing_messages").catch(() => ({ rows: [] }));
+for (const row of res.rows) {
+pricingMessages.set(row.key, row.text);
+}
+}
+// ── Invite tracker DB helpers ────────────────────────────────
+async function dbSaveInviteTracker(guildId) {
+const data = inviteTracker.get(guildId) ?? { joins: [], leaves: [] };
+await db.query(
+`INSERT INTO invite_tracker (guild_id, data) VALUES ($1, $2)
+ON CONFLICT (guild_id) DO UPDATE SET data = $2`,
+[guildId, JSON.stringify(data)]
+).catch(e => console.error("DB save invite tracker error:", e));
+}
+async function dbLoadAllInviteTracker() {
+const res = await db.query("SELECT guild_id, data FROM invite_tracker").catch(() => ({ rows: [] }));
+for (const row of res.rows) {
+inviteTracker.set(row.guild_id, row.data);
+}
+}
+// ── DB loaded flag ───────────────────────────────────────────
+// dbLoaded is accessed via global._bot._dbLoaded so handlers.js
+// sees mutations. Use a getter/setter on the local name too.
+let _dbLoadedVal = false;
+Object.defineProperty(global, '_dbLoadedVal', { get() { return _dbLoadedVal; }, set(v) { _dbLoadedVal = v; if (global._bot) global._bot._dbLoaded = v; }, configurable: true });
+// Alias used in this file
+const getDbLoaded = () => _dbLoadedVal;
+
+async function dbSavePartnerSession(guildId) {
+const d = partnerSessions.get(guildId) ?? {};
+await db.query(`INSERT INTO partner_sessions (guild_id, data) VALUES ($1,$2) ON CONFLICT (guild_id) DO UPDATE SET data=$2`,[guildId,JSON.stringify(d)]).catch(e=>console.error("DB partner_session:",e.message));
+}
+async function dbSaveGiveawayValue(guildId, userId) {
+const key=guildId+":"+userId, d=giveawayValues.get(key)??{totalValue:0,count:0,history:[]};
+await db.query(`INSERT INTO giveaway_values (guild_id, user_id, data) VALUES ($1,$2,$3) ON CONFLICT (guild_id, user_id) DO UPDATE SET data=$3`,[guildId,userId,JSON.stringify(d)]).catch(e=>console.error("DB giveaway_values:",e.message));
+}
+async function dbSaveActiveGiveaway(messageId, channelId, guildId, data) {
+await db.query(`INSERT INTO active_giveaways (message_id, channel_id, guild_id, data) VALUES ($1,$2,$3,$4) ON CONFLICT (message_id) DO UPDATE SET data=$4`,[messageId,channelId,guildId,JSON.stringify(data)]).catch(e=>console.error("DB active_giveaway:",e.message));
+}
+async function dbDeleteActiveGiveaway(messageId) {
+await db.query(`DELETE FROM active_giveaways WHERE message_id=$1`,[messageId]).catch(()=>{});
+}
+
 async function dbSaveStrike(guildId, userId, data) {
 await db.query(`INSERT INTO strikes (guild_id, user_id, data) VALUES ($1,$2,$3) ON CONFLICT (guild_id, user_id) DO UPDATE SET data=$3`,[guildId,userId,JSON.stringify(data)]).catch(e=>console.error("DB strike:",e.message));
 }
@@ -1308,7 +1351,10 @@ return res.end(JSON.stringify({ ok: false, error: "Unauthorized" }));
 }
 // Parse body
 let body = "";
-for await (const chunk of req) body += chunk;
+await new Promise((resolve) => {
+req.on("data", chunk => { body += chunk; });
+req.on("end", resolve);
+});
 let data = {};
 try { data = body ? JSON.parse(body) : {}; } catch { /**/ }
 const url = req.url?.split("?")[0];
@@ -1339,10 +1385,10 @@ premiumGuilds.set(guildId, { activatedBy: "website", activatedAt: Date.now() });
 await dbSavePremiumGuild(guildId, "website");
 return res.end(JSON.stringify({ ok: true }));
 }
+
 // ── POST /premium/revoke ────────────────────────────────
 if (req.method === "POST" && url === "/premium/revoke") {
 const { guildId } = data;
-
 if (!guildId) { res.writeHead(400); return res.end(JSON.stringify({ ok: false, error: "guildId required" })); }
 await dbRemovePremiumGuild(guildId);
 return res.end(JSON.stringify({ ok: true }));
@@ -1383,10 +1429,10 @@ const [partnerRes, gwRes] = await Promise.all([
 db.query("SELECT data FROM partner_links WHERE guild_id=$1", [guildId]).catch(() => ({ rows: [] })),
 db.query("SELECT SUM((data->>'count')::int) as total FROM giveaway_host_counts WHERE guild_id=$1", [guildId]).catch(() => ({ rows: [] })),
 ]);
+
 stats.partnerCount = partnerRes.rows[0]?.data?.links?.length ?? 0;
 stats.giveawayCount = partnerRes.rows[0]?.total ?? 0;
 }
-
 return res.end(JSON.stringify({ ok: true, stats }));
 }
 // ── POST /poll-announcements ────────────────────────────
@@ -1427,10 +1473,10 @@ console.log(` Bot API server running on port ${BOT_API_PORT}`);
 console.error(" Bot API server failed to start:", err.message);
 }
 })();
+
 // ── Also poll bot_announcements table every 30 seconds ────────
 setInterval(async () => {
 try {
-
 const tableExists = await db.query("SELECT to_regclass('public.bot_announcements')").catch(() => ({ rows: [{ to_regclass: null }] }));
 if (!tableExists.rows[0]?.to_regclass) return;
 const pending = await db.query("SELECT * FROM bot_announcements WHERE sent=false ORDER BY created_at ASC LIMIT 5");
