@@ -192,11 +192,28 @@ await db.query(`CREATE TABLE IF NOT EXISTS active_giveaways (message_id TEXT PRI
 await db.query(`CREATE TABLE IF NOT EXISTS strikes (guild_id TEXT NOT NULL, user_id TEXT NOT NULL, data JSONB NOT NULL DEFAULT '[]', PRIMARY KEY (guild_id, user_id))`);
 await db.query(`CREATE TABLE IF NOT EXISTS live_leaderboards (guild_id TEXT PRIMARY KEY, data JSONB NOT NULL DEFAULT '{}')`);
 await db.query(`
+CREATE TABLE IF NOT EXISTS loa_requests (
+id SERIAL PRIMARY KEY,
+guild_id TEXT NOT NULL,
+user_id TEXT NOT NULL,
+reason TEXT,
+days INTEGER,
+status TEXT DEFAULT 'pending',
+accepted_by TEXT,
+accept_reason TEXT,
+reject_reason TEXT,
+loa_role_id TEXT,
+expires_at TIMESTAMPTZ,
+created_at TIMESTAMPTZ DEFAULT NOW()
+)
+`);
+await db.query(`
 CREATE TABLE IF NOT EXISTS bot_announcements (
 id SERIAL PRIMARY KEY,
 title TEXT,
 message TEXT NOT NULL,
 sent_by TEXT,
+
 created_at TIMESTAMPTZ DEFAULT NOW(),
 sent BOOLEAN DEFAULT FALSE,
 sent_at TIMESTAMPTZ
@@ -212,7 +229,6 @@ await db.query(
 `INSERT INTO guild_configs (guild_id, data) VALUES ($1, $2)
 ON CONFLICT (guild_id) DO UPDATE SET data = $2`,
 [guildId, JSON.stringify(cfg)]
-
 ).catch(e => console.error("DB save guild config error:", e));
 }
 async function dbLoadAllGuildConfigs() {
@@ -241,6 +257,7 @@ async function dbLoadAllVouches() {
 const res = await db.query("SELECT user_id, data FROM vouch_store").catch(() => ({ rows: [] }));
 for (const row of res.rows) {
 vouchStore.set(row.user_id, row.data);
+
 }
 console.log(" Loaded", res.rows.length, "vouch entries from DB");
 }
@@ -255,7 +272,6 @@ ON CONFLICT (user_id) DO UPDATE SET data = $2`,
 }
 async function dbLoadAllScamVouches() {
 const res = await db.query("SELECT user_id, data FROM scam_vouches").catch(() => ({ rows: [] }));
-
 for (const row of res.rows) {
 scamVouchStore.set(row.user_id, row.data);
 }
@@ -284,6 +300,7 @@ await db.query(
 ON CONFLICT (guild_id) DO UPDATE SET data = $2`,
 [guildId, JSON.stringify(data)]
 ).catch(e => console.error("DB save partner links error:", e));
+
 }
 async function dbLoadAllPartnerLinks() {
 const res = await db.query("SELECT guild_id, data FROM partner_links").catch(() => ({ rows: [] }));
@@ -298,7 +315,6 @@ const data = weeklyPaymentStore.get(guildId).get(userId) ?? { status: 'not_compl
 await db.query(
 `INSERT INTO weekly_payment_store (guild_id, user_id, data) VALUES ($1, $2, $3)
 ON CONFLICT (guild_id, user_id) DO UPDATE SET data = $3`,
-
 [guildId, userId, JSON.stringify(data)]
 ).catch(e => console.error("DB save weekly_payment error:", e));
 }
@@ -326,6 +342,7 @@ ON CONFLICT (guild_id, user_id) DO UPDATE SET data = $3`,
 ).catch(e => console.error("DB save giveaway count error:", e));
 }
 async function dbLoadAllGiveawayCounts() {
+
 const res = await db.query("SELECT guild_id, user_id, data FROM giveaway_host_counts").catch(() => ({ rows: [] }));
 for (const row of res.rows) {
 giveawayHostCounts.set(row.guild_id + ":" + row.user_id, row.data);
@@ -340,7 +357,6 @@ ON CONFLICT (key) DO UPDATE SET text = $2`,
 ).catch(e => console.error("DB save pricing error:", e));
 }
 async function dbLoadAllPricing() {
-
 const res = await db.query("SELECT key, text FROM pricing_messages").catch(() => ({ rows: [] }));
 for (const row of res.rows) {
 pricingMessages.set(row.key, row.text);
@@ -383,7 +399,6 @@ await db.query(`INSERT INTO active_giveaways (message_id, channel_id, guild_id, 
 async function dbDeleteActiveGiveaway(messageId) {
 await db.query(`DELETE FROM active_giveaways WHERE message_id=$1`,[messageId]).catch(()=>{});
 }
-
 async function dbSaveStrike(guildId, userId, data) {
 await db.query(`INSERT INTO strikes (guild_id, user_id, data) VALUES ($1,$2,$3) ON CONFLICT (guild_id, user_id) DO UPDATE SET data=$3`,[guildId,userId,JSON.stringify(data)]).catch(e=>console.error("DB strike:",e.message));
 }
@@ -413,6 +428,7 @@ ON CONFLICT (guild_id) DO UPDATE SET activated_by=$2, activated_at=NOW()`,
 async function dbRemovePremiumGuild(guildId) {
 premiumGuilds.delete(guildId);
 await db.query("DELETE FROM premium_guilds WHERE guild_id=$1", [guildId])
+
 .catch(e => console.error("DB remove premium_guild:", e.message));
 }
 async function dbSaveActivationKey(key) {
@@ -429,13 +445,36 @@ await db.query(
 }
 async function dbLogTicketStat(guildId, staffId, action, channelId, openedAt) {
 const secsElapsed = openedAt ? Math.floor((Date.now() - openedAt) / 1000) : null;
-
 await db.query(
 `INSERT INTO ticket_stats (guild_id, staff_id, action, ticket_channel_id, opened_at, seconds_elapsed)
 VALUES ($1,$2,$3,$4,$5,$6)`,
 [guildId, staffId, action, channelId, openedAt ? new Date(openedAt) : null, secsElapsed]
 ).catch(e => console.error("DB ticket_stat:", e.message));
 }
+// ── LOA DB helpers ───────────────────────────────────────────
+async function dbSaveLoaRequest(req) {
+const res = await db.query(
+`INSERT INTO loa_requests (guild_id, user_id, reason, days, status, loa_role_id, expires_at, accepted_by, accept_reason, reject_reason)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
+[req.guildId, req.userId, req.reason, req.days, req.status ?? 'pending',
+req.loaRoleId ?? null, req.expiresAt ?? null,
+req.acceptedBy ?? null, req.acceptReason ?? null, req.rejectReason ?? null]
+).catch(e => { console.error("DB loa save:", e.message); return { rows: [] }; });
+return res.rows[0]?.id;
+}
+async function dbUpdateLoaRequest(id, fields) {
+const sets = Object.keys(fields).map((k,i) => `${k}=$${i+2}`).join(", ");
+const vals = Object.values(fields);
+await db.query(`UPDATE loa_requests SET ${sets} WHERE id=$1`, [id, ...vals])
+.catch(e => console.error("DB loa update:", e.message));
+}
+async function dbLoadPendingLoas() {
+const res = await db.query(
+`SELECT * FROM loa_requests WHERE status='approved' AND expires_at > NOW()`
+).catch(() => ({ rows: [] }));
+return res.rows;
+}
+
 // ── Load everything from DB on startup ───────────────────────
 async function loadAllFromDB() {
 await Promise.all([
@@ -475,7 +514,6 @@ const ag = await db.query("SELECT message_id, channel_id, guild_id, data FROM ac
 let gwRestored = 0;
 for (const r of ag.rows) {
 const data = r.data;
-
 activeGiveaways.set(r.message_id, data);
 const remaining = data.endsAt - Date.now();
 const delay = remaining > 0 ? remaining : 5000; // if expired, end after 5s
@@ -483,6 +521,7 @@ const delay = remaining > 0 ? remaining : 5000; // if expired, end after 5s
 setTimeout(async () => {
 try {
 const ch = await client.channels.fetch(r.channel_id).catch(() => null);
+
 if (!ch) { dbDeleteActiveGiveaway(r.message_id); return; }
 if (data.isSplitOrSteal) await endSplitOrStealGiveaway(r.message_id, ch, data).catch(()=>{});
 else await endGiveaway(r.message_id, ch).catch(()=>{});
@@ -504,6 +543,7 @@ helperRoleId: null, pmRoleId: null, ticketStaffRoleId: null,
 spawnerBuyPrice: 4400000, spawnerSellPrice: 5200000,
 ticketTypes: null, appTypes: null,
 ticketLogsChannelId: null, announceChannelId: null,
+loaChannelId: null, loaRoleId: null,
 lowestStaffRoleId: null, raidWarningsChannelId: null,
 memberRoleId: null, strikeChannelId: null, promotionChannelId: null,
 founderRoleId: null, founderUserIds: [], antiRaid: null,
@@ -522,13 +562,13 @@ pmRoleId: process.env.PM_ROLE_ID ?? null,
 ticketStaffRoleId: process.env.TICKET_STAFF_ROLE_ID ?? null,
 spawnerBuyPrice: 4400000,
 spawnerSellPrice: 5200000,
-
 ticketTypes: null, // null = use defaults
 appTypes: null, // null = use defaults
 });
 }
 return guildConfigs.get(guildId);
 }
+
 // ── Ticket category names (must match exactly in your server) ─
 const TICKET_CATEGORIES = {
 support: "Support Tickets",
@@ -566,12 +606,12 @@ const num = parseFloat(match[1]);
 const suffix = match[3];
 return suffix ? num * multipliers[suffix] : num;
 }
-
 // ── Helper: format large numbers back to readable string ──────
 function formatNumber(num) {
 if (num >= 1_000_000_000) return (num / 1_000_000_000).toFixed(2).replace(/\.00$/, "") + "b";
 if (num >= 1_000_000) return (num / 1_000_000).toFixed(2).replace(/\.00$/, "") + "m";
 if (num >= 1_000) return (num / 1_000).toFixed(2).replace(/\.00$/, "") + "k";
+
 return num.toString();
 }
 // ── Helper: compact stat number (1500 -> 1.5k) ─────────────
@@ -606,12 +646,12 @@ const rawCommands = [
 new SlashCommandBuilder()
 .setName("warn")
 .setDescription("Warn a member")
-
 .addUserOption(o => o.setName("user").setDescription("Member to warn").setRequired(true))
 .addStringOption(o => o.setName("reason").setDescription("Reason for warning").setRequired(true))
 .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
 new SlashCommandBuilder()
 .setName("warnings")
+
 .setDescription("View warnings for a member")
 .addUserOption(o => o.setName("user").setDescription("Member to check").setRequired(true))
 .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
@@ -645,13 +685,13 @@ new SlashCommandBuilder()
 new SlashCommandBuilder()
 .setName("timeout")
 .setDescription("Timeout a member")
-
 .addUserOption(o => o.setName("user").setDescription("Member to timeout").setRequired(true))
 .addStringOption(o =>
 o.setName("duration")
 .setDescription("Duration (e.g. 10m, 1h, 7d — max 28d)")
 .setRequired(true)
 )
+
 .addStringOption(o => o.setName("reason").setDescription("Reason for timeout").setRequired(false))
 .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
 new SlashCommandBuilder()
@@ -691,6 +731,7 @@ new SlashCommandBuilder()
 .setName("spawner")
 .setDescription("Calculate spawner buy or sell total")
 .addStringOption(o =>
+
 o.setName("amount")
 .setDescription("Number of spawners (supports k/m/b)")
 .setRequired(true)
@@ -728,13 +769,13 @@ new SlashCommandBuilder().setName("setup").setDescription("Open the bot setup pa
 new SlashCommandBuilder().setName("wait").setDescription("Send the wait message"),
 // ── GIVEAWAY ─────────────────────────────────────────────
 new SlashCommandBuilder()
-
 .setName("giveaway").setDescription("Start a giveaway")
 .addStringOption(o=>o.setName("prize").setDescription("Prize (e.g. Elytra, 10m)").setRequired(true))
 .addStringOption(o=>o.setName("duration").setDescription("Duration (e.g. 1h, 30m, 2d)").setRequired(true))
 .addStringOption(o=>o.setName("description").setDescription("Extra description").setRequired(false))
 .addIntegerOption(o=>o.setName("winners").setDescription("Winners (default: 1)").setRequired(false).setMinValue(1).setMaxValue(20))
 .addStringOption(o=>o.setName("itemvalue").setDescription("Item value for tracking (e.g. 50m)").setRequired(false))
+
 .setDefaultMemberPermissions(PermissionFlagsBits.ManageEvents),
 new SlashCommandBuilder()
 .setName("giveawaydork").setDescription("Start a Dork giveaway — winner can double the prize")
@@ -773,12 +814,12 @@ o.setName("username")
 )
 .setDMPermission(true),
 // ── DONUT SMP: LOOKUP ─────────────────────────────────────
-
 new SlashCommandBuilder()
 .setName("lookup")
 .setDescription("Look up a DonutSMP player's rank and location")
 .addStringOption(o =>
 o.setName("username")
+
 .setDescription("In-game username")
 .setRequired(true)
 )
@@ -816,11 +857,11 @@ o.setName("page")
 .setMaxValue(10)
 )
 .setDMPermission(true),
-
 // ── DONUT SMP: LEADERBOARD ───────────────────────────────
 new SlashCommandBuilder()
 .setName("leaderboard")
 .setDescription("View DonutSMP leaderboards")
+
 .addStringOption(o =>
 o.setName("type")
 .setDescription("Which leaderboard to view")
@@ -856,12 +897,12 @@ new SlashCommandBuilder()
 .setDescription("Post the ticket panel in this channel")
 .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
 // ── APPLICATION PANEL ────────────────────────────────────
-
 new SlashCommandBuilder()
 .setName("applicationpanelsend")
 .setDescription("Post the staff application panel in this channel")
 .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
 // ── VOUCH ─────────────────────────────────────────────────
+
 new SlashCommandBuilder()
 .setName("vouch")
 .setDescription("Vouch for a user in this server")
@@ -898,12 +939,12 @@ o.setName("action")
 )
 )
 .addStringOption(o =>
-
 o.setName("reason")
 .setDescription("Reason for locking")
 .setRequired(false)
 )
 .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
+
 // ── EMBED ORGANIZED ───────────────────────────────────────
 new SlashCommandBuilder()
 .setName("embedorganized")
@@ -938,11 +979,11 @@ new SlashCommandBuilder()
 .addUserOption(o =>
 o.setName("user")
 .setDescription("User to add")
-
 .setRequired(true)
 )
 .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
 // ── TICKET USER REMOVE ────────────────────────────────────
+
 new SlashCommandBuilder()
 .setName("ticketuserremove")
 .setDescription("Remove a user from the current ticket")
@@ -975,12 +1016,12 @@ new SlashCommandBuilder()
 
 new SlashCommandBuilder()
 .setName("features")
-
 .setDescription("Show all bot features")
 .setDMPermission(true),
 new SlashCommandBuilder()
 .setName("commands")
 .setDescription("Show all bot commands")
+
 .setDMPermission(true),
 // ── SLOWMODE ──────────────────────────────────────────────
 new SlashCommandBuilder()
@@ -1011,11 +1052,11 @@ new SlashCommandBuilder()
 .addUserOption(o => o.setName("user").setDescription("User to check (defaults to yourself)").setRequired(false)),
 // ── ROLE INFO ─────────────────────────────────────────────
 new SlashCommandBuilder()
-
 .setName("roleinfo")
 .setDescription("View info about a role")
 .addRoleOption(o => o.setName("role").setDescription("Role to check").setRequired(true)),
 // ── INVITE TRACKER ────────────────────────────────────────
+
 new SlashCommandBuilder()
 .setName("invitetracker")
 .setDescription("View join/leave stats for this server")
@@ -1052,7 +1093,6 @@ new SlashCommandBuilder()
 .setName("lockdown")
 .setDescription("Lock all channels in the server (Founder only)"),
 new SlashCommandBuilder()
-
 .setName("unlockdown")
 .setDescription("Unlock all channels in the server (Founder only)"),
 // ── SETUP WELCOME ─────────────────────────────────────────
@@ -1088,12 +1128,12 @@ o.setName("period")
 { name: "All Time", value: "all" }
 )
 ),
-
 // ── GIVEAWAY TRACKING ─────────────────────────────────────
 new SlashCommandBuilder()
 .setName("giveawaytracking")
 .setDescription("Show the giveaway host leaderboard")
 .addStringOption(o =>
+
 o.setName("period")
 .setDescription("Time period (default: all time)")
 .setRequired(false)
@@ -1130,13 +1170,13 @@ o.setName("status")
 .setDescription("Mark as completed or not completed")
 .setRequired(true)
 .addChoices(
-
 { name: " Completed", value: "completed" },
 { name: " Not Completed", value: "not_completed" }
 )
 )
 .addStringOption(o =>
 o.setName("amount")
+
 .setDescription("Amount paid (e.g. 10M, 5M, 15M) — shown on post for completed users")
 .setRequired(false)
 )
@@ -1171,13 +1211,17 @@ new SlashCommandBuilder()
 .addStringOption(o => o.setName("message").setDescription("The announcement message").setRequired(true))
 .addStringOption(o => o.setName("title").setDescription("Optional title").setRequired(false))
 .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
-
 // ── MESSAGE (plain text sender) ───────────────────────────
 new SlashCommandBuilder()
 .setName("message")
 .setDescription("Send a plain message to this channel")
 .addStringOption(o => o.setName("text").setDescription("The message to send").setRequired(true))
+
 .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages),
+// ── LOA (Leave of Absence) ───────────────────────────────
+new SlashCommandBuilder()
+.setName("loa")
+.setDescription("Request a leave of absence (staff only)"),
 new SlashCommandBuilder()
 .setName("weeklypaymentpost")
 .setDescription("Post the weekly payment list publicly")
@@ -1328,6 +1372,7 @@ dbSaveActivationKey, dbMarkKeyUsed, dbLogTicketStat,
 parseNumber, formatNumber, compactStat, errorEmbed, successEmbed,
 parseDuration, BOT_OWNER_ID, isOwner, generateActivationKey,
 requirePerm, INVITE_REGEX_GLOBAL,
+dbSaveLoaRequest, dbLoadPendingLoas,
 };
 // ── Load all event & interaction handlers ─────────────────────
 require("./handlers");
@@ -1341,8 +1386,8 @@ process.on("uncaughtException", err => console.error(" Uncaught exception:", err
 try {
 const http = require("http");
 const BOT_SECRET = process.env.BOT_API_SECRET;
-const server = http.createServer(async (req, res) => {
 
+const server = http.createServer(async (req, res) => {
 // Auth check
 const auth = req.headers["authorization"] ?? "";
 if (!BOT_SECRET || auth !== `Bearer ${BOT_SECRET}`) {
@@ -1428,8 +1473,8 @@ if (guildId) {
 const [partnerRes, gwRes] = await Promise.all([
 db.query("SELECT data FROM partner_links WHERE guild_id=$1", [guildId]).catch(() => ({ rows: [] })),
 db.query("SELECT SUM((data->>'count')::int) as total FROM giveaway_host_counts WHERE guild_id=$1", [guildId]).catch(() => ({ rows: [] })),
-]);
 
+]);
 stats.partnerCount = partnerRes.rows[0]?.data?.links?.length ?? 0;
 stats.giveawayCount = partnerRes.rows[0]?.total ?? 0;
 }
