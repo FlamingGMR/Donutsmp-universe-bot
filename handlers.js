@@ -140,7 +140,7 @@ questions = customType?.questions ?? [];
 }
 const answers = questions.slice(0, 5).map((q, i) => {
 let ans = "";
-try { ans = interaction.fields.getTextInputValue(`tq_${i}`).trim(); } catch { ans = "—"; }
+try { ans = interaction.fields.getTextInputValue(`tq_${i}`).trim(); } catch (_) { ans = "—"; }
 return { q, ans };
 });
 // Create the ticket — pass answers so they show in welcome embed
@@ -152,10 +152,10 @@ await interaction.reply({ content: " Message sent!", flags: MessageFlags.Ephemer
 return interaction.channel.send({ content: text });
 }
 if (cid === "embedorganized_modal") {
-const title = (() => { try { return interaction.fields.getTextInputValue("embed_title").trim(); } catch { return ""; } })();
+const title = (() => { try { return interaction.fields.getTextInputValue("embed_title").trim(); } catch (_) { return ""; } })();
 const description = interaction.fields.getTextInputValue("embed_description");
 let footer = "";
-try { footer = interaction.fields.getTextInputValue("embed_footer").trim(); } catch { footer = ""; }
+try { footer = interaction.fields.getTextInputValue("embed_footer").trim(); } catch (_) { footer = ""; }
 const embed = new EmbedBuilder()
 .setColor(0x1e40af)
 .setDescription(description)
@@ -290,9 +290,49 @@ const reason = interaction.options.getString("reason") ?? "No reason provided";
 let user;
 try {
 user = await client.users.fetch(userId);
-} catch {
+} catch (_) {
 return interaction.reply({ embeds: [errorEmbed("Could not find a user with that ID.")], flags: MessageFlags.Ephemeral });
 }
+
+try {
+await interaction.guild.members.unban(userId, reason);
+} catch (_) {
+return interaction.reply({ embeds: [errorEmbed("That user is not banned or I lack permission.")], flags: MessageFlags.Ephemeral });
+}
+const embed = new EmbedBuilder()
+.setColor(0x2ecc71)
+.setTitle(" Member Unbanned")
+.addFields(
+{ name: " User", value: `${user.username} (${userId})`, inline: true },
+{ name: " Moderator", value: `<@${interaction.user.id}>`, inline: true },
+{ name: " Reason", value: reason }
+)
+.setThumbnail(user.displayAvatarURL({ forceStatic: false }) ?? null)
+.setTimestamp();
+return interaction.reply({ embeds: [embed] });
+}
+// ==========================================================
+// MODERATION: /timeout
+// ==========================================================
+if (commandName === "timeout") {
+const _permCheck = requirePerm(interaction, PermissionFlagsBits.ModerateMembers); if (_permCheck) return _permCheck;
+const target = interaction.options.getUser("user");
+const durStr = interaction.options.getString("duration");
+const reason = interaction.options.getString("reason") ?? "No reason provided";
+const durationMs = parseDuration(durStr);
+if (isNaN(durationMs)) {
+return interaction.reply({ embeds: [errorEmbed("Invalid duration. Use formats like `10m`, `1h`, `7d`.")], flags: MessageFlags.Ephemeral });
+}
+const maxTimeout = 28 * 24 * 60 * 60 * 1000; // 28 days in ms
+if (durationMs > maxTimeout) {
+return interaction.reply({ embeds: [errorEmbed("Maximum timeout duration is 28 days.")], flags: MessageFlags.Ephemeral });
+}
+const member = await interaction.guild.members.fetch(target.id).catch(() => null);
+if (!member) {
+return interaction.reply({ embeds: [errorEmbed("That user is not in this server.")], flags: MessageFlags.Ephemeral });
+}
+if (!member.moderatable) {
+return interaction.reply({ embeds: [errorEmbed("I cannot timeout that user. They may have a higher role than me.")], flags: MessageFlags.Ephemeral });
 
 }
 await member.timeout(durationMs, reason);
@@ -772,7 +812,7 @@ let vouchChannel;
 try {
 vouchChannel = interaction.guild.channels.cache.get(vouchChannelId)
 ?? await interaction.guild.channels.fetch(vouchChannelId);
-} catch {
+} catch (_) {
 return interaction.reply({
 embeds: [errorEmbed("Could not find the vouch channel. Use `/setupvouch` to reconfigure it.")],
 flags: MessageFlags.Ephemeral,
@@ -1181,7 +1221,7 @@ new EmbedBuilder()
 ],
 });
 
-} catch {
+} catch (_) {
 return interaction.reply({ embeds: [errorEmbed("Failed to set slowmode.")], flags: MessageFlags.Ephemeral });
 }
 }
@@ -1221,7 +1261,7 @@ new EmbedBuilder()
 if (commandName === "serverinfo") {
 if (!interaction.guild) return interaction.reply({ embeds: [errorEmbed("This command can only be used in a server.")], flags: MessageFlags.Ephemeral });
 const guild = interaction.guild;
-try { await guild.fetch(); } catch { /* use cached data */ }
+try { await guild.fetch(); } catch (_) { /* use cached data */ }
 const created = Math.floor(guild.createdTimestamp / 1000);
 return interaction.reply({
 
@@ -1398,7 +1438,7 @@ for (const [, ch] of textChannels) {
 try {
 await ch.permissionOverwrites.edit(interaction.guild.roles.everyone, { SendMessages: isLock ? false : null });
 success++;
-} catch { failed++; }
+} catch (_) { failed++; }
 }
 return interaction.editReply({
 embeds: [
@@ -1558,7 +1598,7 @@ if (!ch?.isTextBased()) { failed++; continue; }
 try {
 await ch.send({ embeds: [new EmbedBuilder().setColor(0xf1c40f).setTitle(title).setDescription(msg).setFooter({ text: "DonutSMP Universe Bot" }).setTimestamp()] });
 sent++;
-} catch { failed++; }
+} catch (_) { failed++; }
 }
 return interaction.editReply({ embeds: [new EmbedBuilder().setColor(0x2ecc71).setTitle(" Announcement Sent").setDescription(`Sent to **${sent}** servers. Failed: **${failed}**.`).setTimestamp()] });
 }
@@ -2598,7 +2638,7 @@ const session = setupSessions.get(sessionKey);
 if (!session) return interaction.reply({ embeds: [errorEmbed("Session expired — run `/setuptickets` again.")], flags: MessageFlags.Ephemeral });
 const name = interaction.fields.getTextInputValue("t_name").trim();
 const description = interaction.fields.getTextInputValue("t_description").trim();
-const questionsRaw = (() => { try { return interaction.fields.getTextInputValue("t_questions").trim(); } catch { return ""; } })();
+const questionsRaw = (() => { try { return interaction.fields.getTextInputValue("t_questions").trim(); } catch (_) { return ""; } })();
 const questions = questionsRaw ? questionsRaw.split("\n").map(q=>q.trim()).filter(Boolean).slice(0,5) : [];
 if (isEdit) {
 
@@ -2671,7 +2711,7 @@ dbDeleteActiveGiveaway(messageId);
 let giveawayMsg;
 try {
 giveawayMsg = await channel.messages.fetch(messageId);
-} catch {
+} catch (_) {
 console.error(` Could not fetch giveaway message ${messageId}`);
 return;
 }
@@ -3545,7 +3585,7 @@ new EmbedBuilder()
 .setTimestamp(),
 ],
 });
-} catch {
+} catch (_) {
 console.warn(` Could not DM ${member.user.username} about acceptance`);
 }
 // Disable buttons on the submission message
@@ -3621,7 +3661,7 @@ new EmbedBuilder()
 .setTimestamp(),
 ],
 });
-} catch {
+} catch (_) {
 console.warn(` Could not DM user ${userId} about denial`);
 }
 // Disable buttons on the submission message
@@ -3977,7 +4017,7 @@ const reason = reasonOverride ?? (() => {
 try {
 const r = interaction.fields.getTextInputValue("close_reason").trim();
 return r || "No reason provided";
-} catch { return "No reason provided"; }
+} catch (_) { return "No reason provided"; }
 })();
 const channel = interaction.guild.channels.cache.get(channelId);
 if (!channel) return interaction.reply({ embeds: [errorEmbed("Could not find the ticket channel to close.")], flags: MessageFlags.Ephemeral });
@@ -4004,14 +4044,14 @@ transcript = allMsgs.filter(m => !m.author.bot)
 
 .map(m => "[" + new Date(m.createdTimestamp).toISOString() + "] " + m.author.username + ": " + m.content)
 .join("\n");
-} catch {}
+} catch (_) {}
 // DM opener
 if (openerUserId) {
 try {
 const opener = await client.users.fetch(openerUserId).catch(()=>null);
 if (opener) await opener.send({ embeds: [new EmbedBuilder().setColor(0xe74c3c).setTitle(" Your Ticket Was Closed")
 .setDescription("Your ticket **" + channel.name + "** was closed by <@" + interaction.user.id + ">.\n\n**Reason:** " + reason).setTimestamp()] }).catch(()=>{});
-} catch {}
+} catch (_) {}
 }
 // Log to ticket logs channel with transcript
 const cfg2 = getGuildConfig(interaction.guildId);
@@ -4032,7 +4072,7 @@ embeds: [new EmbedBuilder().setColor(0xe74c3c).setTitle(" Ticket Closed")
 files: [attachment],
 }).catch(()=>{});
 }
-} catch {}
+} catch (_) {}
 }
 await channel.send({ embeds: [new EmbedBuilder().setColor(0xe74c3c).setTitle(" Ticket Closed")
 .setDescription("Closed by <@" + interaction.user.id + ">.\n\n**Reason:** " + reason).setTimestamp()] }).catch(()=>{});
@@ -4099,7 +4139,7 @@ if (e&&e.target?.id===member.id&&Date.now()-e.createdTimestamp<5000) {
 const count=recordAntiRaidAction(member.guild.id,"kicks");
 await checkAntiRaid(member.guild,e.executor.id,"Kicks",count,cfg.antiRaid.kickLimit);
 }
-} catch {}
+} catch (_) {}
 }
 });
 // ── Helper: ordinal suffix (1st, 2nd, 3rd, 4th...) ──────────
@@ -4139,7 +4179,7 @@ if (type==="vouch") embed = buildVouchLeaderboard(guildId, info.period??"all");
 if (type==="gwvalue") embed = buildGiveawayValueLeaderboard(guildId, info.period??"all");
 if (type==="partnerSession") { await refreshPartnerSession(guildId,info).catch(()=>{}); continue; }
 if (embed) await msg.edit({embeds:[embed]}).catch(()=>{});
-} catch {}
+} catch (_) {}
 }
 }
 }, 5*60*1000);
@@ -4258,7 +4298,7 @@ if (type === "giveaway") embed = buildGiveawayTrackingLeaderboard(guildId, info.
 if (type === "vouch") embed = buildVouchLeaderboard(guildId, info.period ?? "all");
 
 if (embed) await msg.edit({ embeds: [embed] }).catch(() => {});
-} catch { /* ignore refresh errors */ }
+} catch (_) { /* ignore refresh errors */ }
 }
 }
 }, 5 * 60 * 1000);
@@ -4483,7 +4523,7 @@ resolve();
 },
 });
 });
-} catch {
+} catch (_) {
 responses.set(userId, "timeout");
 }
 }
@@ -4789,7 +4829,7 @@ console.log(" Anti-raid: member",userId,"not found in",guild.name);
 } catch(err) { console.error(" Anti-raid timeout error:", err.message); }
 const founderMentions=[...(cfg.founderRoleId?["<@&"+cfg.founderRoleId+">"]:[]),(cfg.founderUserIds??[]).map(id=>"<@"+id+">")].flat();
 const founderStr=founderMentions.length?"Please contact "+founderMentions.join(" or ")+" if this was a mistake.":"Please contact a server admin if this was a mistake.";
-try { const u=await client.users.fetch(userId).catch(()=>null); if(u) await u.send("You've been timed out for 48 hours in **"+guild.name+"** for suspicion of raid. "+founderStr).catch(()=>{}); } catch {}
+try { const u=await client.users.fetch(userId).catch(()=>null); if(u) await u.send("You've been timed out for 48 hours in **"+guild.name+"** for suspicion of raid. "+founderStr).catch(()=>{}); } catch (_) {}
 if (cfg.raidWarningsChannelId) {
 try {
 const ch=await client.channels.fetch(cfg.raidWarningsChannelId).catch(()=>null);
@@ -4802,7 +4842,7 @@ if (ch) await ch.send({embeds:[new EmbedBuilder().setColor(0xe74c3c).setTitle(" 
 {name:" Time",value:"<t:"+Math.floor(Date.now()/1000)+":F>",inline:true},
 {name:" Punishment",value:"48-hour timeout",inline:true}
 ).setTimestamp()]}).catch(()=>{});
-} catch {}
+} catch (_) {}
 }
 }
 client.on("channelDelete", async (channel) => {
@@ -5057,7 +5097,7 @@ return interaction.showModal(modal);
 }
 async function handleLoaAcceptModal(interaction, loaId) {
 const durationStr = interaction.fields.getTextInputValue("acc_duration").trim().toLowerCase();
-const accReason = (() => { try { return interaction.fields.getTextInputValue("acc_reason").trim(); } catch { return ""; } })();
+const accReason = (() => { try { return interaction.fields.getTextInputValue("acc_reason").trim(); } catch (_) { return ""; } })();
 const daysMatch = durationStr.match(/^(\d+)d$/i);
 if (!daysMatch) return interaction.reply({ embeds: [errorEmbed("Invalid duration. Use e.g. `7d`")], flags: MessageFlags.Ephemeral });
 const days = parseInt(daysMatch[1]);
@@ -5097,7 +5137,7 @@ embeds: [new EmbedBuilder()
 .setTimestamp()],
 });
 }
-} catch { /**/ }
+} catch (_) { /**/ }
 // Update the review message
 await interaction.update({
 embeds: [new EmbedBuilder()
@@ -5141,7 +5181,7 @@ embeds: [new EmbedBuilder()
 .setTimestamp()],
 });
 }
-} catch { /**/ }
+} catch (_) { /**/ }
 await interaction.update({
 embeds: [new EmbedBuilder()
 .setColor(0xe74c3c)
@@ -5488,7 +5528,7 @@ const staffRoles = member.roles.cache.filter(r => r.position > memberRole.positi
 roleList = staffRoles.size ? staffRoles.sort((a,b) => b.position - a.position).map(r => r.name).join(", ") : "None above member";
 }
 }
-} catch {}
+} catch (_) {}
 const strikeHistory = strikes.map((s,i) => `**Strike ${i+1}:** ${s.reason} — by <@${s.by}> (<t:${Math.floor(s.timestamp/1000)}:d>)`).join("\n");
 const alertEmbed = new EmbedBuilder()
 .setColor(0xff0000)
@@ -5543,7 +5583,7 @@ const guild = interaction.guild;
 
 if (!guild) return interaction.update({ embeds: [errorEmbed("Guild not found.")], components: [] });
 let member;
-try { member = await guild.members.fetch(userId).catch(() => null); } catch {}
+try { member = await guild.members.fetch(userId).catch(() => null); } catch (_) {}
 if (!member) {
 return interaction.update({ embeds: [new EmbedBuilder().setColor(0xe74c3c).setTitle(" Demotion Failed").setDescription("Could not find member in this server.").setTimestamp()], components: [] });
 }
@@ -5554,7 +5594,7 @@ const memberRole = guild.roles.cache.get(cfg.memberRoleId);
 if (memberRole) {
 const toRemove = member.roles.cache.filter(r => r.position > memberRole.position && r.id !== guild.id && r.managed === false);
 for (const [,role] of toRemove) {
-try { await member.roles.remove(role, "3 strikes — demoted by " + interaction.user.username); removedRoles.push(role.name); } catch {}
+try { await member.roles.remove(role, "3 strikes — demoted by " + interaction.user.username); removedRoles.push(role.name); } catch (_) {}
 }
 }
 } else {
@@ -5577,7 +5617,7 @@ embeds: [new EmbedBuilder()
 )
 .setTimestamp()],
 }).catch(() => {});
-} catch {}
+} catch (_) {}
 }
 return interaction.update({
 embeds: [new EmbedBuilder()

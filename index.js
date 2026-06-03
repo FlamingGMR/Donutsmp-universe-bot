@@ -1263,7 +1263,7 @@ async function registerCommands() {
 const token=process.env.TOKEN, clientId=process.env.CLIENT_ID, guildId=process.env.GUILD_ID;
 if (!token||!clientId) { console.error("Missing TOKEN or CLIENT_ID"); return; }
 const rest = new REST({ version:"10" }).setToken(token);
-try { for (const g of client.guilds.cache.values()) await rest.put(Routes.applicationGuildCommands(clientId,g.id),{body:[]}).catch(()=>{}); console.log("Cleared guild-scoped commands"); } catch {}
+try { for (const g of client.guilds.cache.values()) await rest.put(Routes.applicationGuildCommands(clientId,g.id),{body:[]}).catch(()=>{}); console.log("Cleared guild-scoped commands"); } catch (_) {}
 console.log("Registering slash commands...");
 try {
 await rest.put(Routes.applicationCommands(clientId),{body:[]});
@@ -1401,7 +1401,7 @@ req.on("data", chunk => { body += chunk; });
 req.on("end", resolve);
 });
 let data = {};
-try { data = body ? JSON.parse(body) : {}; } catch { /**/ }
+try { data = body ? JSON.parse(body) : {}; } catch (_) { /**/ }
 const url = req.url?.split("?")[0];
 res.setHeader("Content-Type", "application/json");
 // ── POST /announce ──────────────────────────────────────
@@ -1418,7 +1418,7 @@ if (!ch?.isTextBased()) { failed++; continue; }
 try {
 await ch.send({ embeds: [new EmbedBuilder().setColor(0xf1c40f).setTitle(title || " Announcement").setDescription(message).setFooter({ text: "DonutSMP Universe Bot" }).setTimestamp()] });
 sent++;
-} catch { failed++; }
+} catch (_) { failed++; }
 }
 return res.end(JSON.stringify({ ok: true, sent, failed }));
 }
@@ -1497,7 +1497,7 @@ if (!ch?.isTextBased()) { rowFailed++; continue; }
 try {
 await ch.send({ embeds: [new EmbedBuilder().setColor(0xf1c40f).setTitle(row.title || " Announcement").setDescription(row.message).setFooter({ text: "DonutSMP Universe Bot" }).setTimestamp()] });
 rowSent++;
-} catch { rowFailed++; }
+} catch (_) { rowFailed++; }
 }
 await db.query("UPDATE bot_announcements SET sent=true, sent_at=NOW() WHERE id=$1", [row.id]);
 sent++;
@@ -1532,11 +1532,11 @@ const channelId = cfg.announceChannelId ?? cfg.welcomeChannelId;
 if (!channelId) continue;
 const ch = guild.channels.cache.get(channelId);
 if (!ch?.isTextBased()) continue;
-try { await ch.send({ embeds: [new EmbedBuilder().setColor(0xf1c40f).setTitle(row.title || " Announcement").setDescription(row.message).setFooter({ text: "DonutSMP Universe Bot" }).setTimestamp()] }); } catch { /**/ }
+try { await ch.send({ embeds: [new EmbedBuilder().setColor(0xf1c40f).setTitle(row.title || " Announcement").setDescription(row.message).setFooter({ text: "DonutSMP Universe Bot" }).setTimestamp()] }); } catch (_) { /**/ }
 }
 await db.query("UPDATE bot_announcements SET sent=true, sent_at=NOW() WHERE id=$1", [row.id]).catch(() => {});
 }
-} catch { /**/ }
+} catch (_) { /**/ }
 }, 30000);
 // ── Connect to Discord ────────────────────────────────────────
 client.login(process.env.TOKEN);
